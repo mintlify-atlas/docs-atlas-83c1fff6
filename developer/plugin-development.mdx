@@ -1,0 +1,168 @@
+---
+title: "Writing Dokka plugins: setup and extension points"
+description: "Learn how to build a Dokka plugin from scratch — add custom KDoc tags, new output formats, or annotation-based filtering using Dokka's extension point system."
+keywords: ["dokka plugin", "plugin development", "extension points", "DokkaPlugin", "ServiceLoader", "dokka-core", "custom plugin"]
+---
+
+Dokka was built from the ground up to be extensible and highly customizable, which allows the community to implement plugins for features that are not provided out of the box. Plugins can range from supporting new programming language sources and exotic output formats to adding custom KDoc tag rendering, visually redesigning pages for a company website, or filtering documentation based on annotations.
+
+## What plugins can do
+
+The extension point system gives you entry points into every stage of Dokka's pipeline. Common plugin use cases include:
+
+- **Custom KDoc tags** — parse and render tags that are not part of the standard KDoc specification
+- **New output formats** — generate documentation in formats beyond the built-in HTML, Javadoc, and Markdown outputs
+- **Annotation-based filtering** — suppress or transform documentables based on annotations present in source code
+- **Visual customization** — replace stylesheets, templates, or page structure to match your brand
+- **Integration with external tools** — emit structured data alongside generated documentation for other tooling to consume
+
+<Tip>
+  For a practical example of annotation-based filtering, follow the [sample plugin tutorial](/developer/sample-plugin-tutorial), which walks through building a plugin that hides members annotated with `@Internal`.
+</Tip>
+
+## Set up a plugin project
+
+### Using the plugin template (recommended)
+
+The easiest way to start is the [Dokka plugin template](https://github.com/Kotlin/dokka-plugin-template) on GitHub. It comes pre-configured with:
+
+- The `dokka-core` and `dokka-base` dependencies
+- Publishing and signing configuration for Maven Central
+- A pre-made test class extending `BaseAbstractTest`
+- The `META-INF/services` file for ServiceLoader registration
+
+Click **Use this template** on GitHub, then [open the project in IntelliJ IDEA](https://www.jetbrains.com/idea/guide/tutorials/working-with-gradle/opening-a-gradle-project/).
+
+### Manual setup
+
+If you prefer to set up the project yourself, add `dokka-core` as a `compileOnly` dependency at minimum. You also need `dokka-base` if you plan to extend base extension points:
+
+```kotlin build.gradle.kts
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+plugins {
+    kotlin("jvm") version "<kotlin_version>"
+}
+
+dependencies {
+    compileOnly("org.jetbrains.dokka:dokka-core:<dokka_version>")
+    implementation("org.jetbrains.dokka:dokka-base:<dokka_version>")
+}
+
+tasks.withType<KotlinCompile>().configureEach {
+    compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
+}
+```
+
+<Note>
+  Use `compileOnly` for `dokka-core` because Dokka itself provides that dependency at runtime. Using `implementation` would bundle a second copy of `dokka-core` into your plugin JAR and cause classpath conflicts.
+</Note>
+
+## Extend `DokkaPlugin`
+
+Every Dokka plugin must have a class that extends `DokkaPlugin`. This class acts as the entry point where you declare all extensions your plugin provides:
+
+```kotlin
+package org.example.dokka.plugin
+
+import org.jetbrains.dokka.plugability.DokkaPlugin
+
+class MyPlugin : DokkaPlugin() {
+    // Extension declarations go here
+}
+```
+
+You declare extensions using the `extending` delegate inside the plugin class body. The `extending` block specifies which extension point you are implementing and which class provides the implementation:
+
+```kotlin
+class HideInternalApiPlugin : DokkaPlugin() {
+    val myFilterExtension by extending {
+        plugin<DokkaBase>().preMergeDocumentableTransformer providing ::HideInternalApiTransformer
+    }
+}
+```
+
+## Register the plugin with ServiceLoader
+
+Dokka discovers plugins at runtime using `java.util.ServiceLoader`. You must register your plugin class by creating the following file:
+
+```
+resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin
+```
+
+The file must contain the fully qualified class name of your `DokkaPlugin` subclass, one per line:
+
+```
+org.example.dokka.plugin.MyPlugin
+```
+
+If you used the plugin template, this file already exists at the correct path. Update it whenever you rename your plugin class.
+
+<Warning>
+  If this file is missing or contains the wrong class name, Dokka will silently ignore your plugin. Double-check the path and class name if your plugin does not appear to be loaded.
+</Warning>
+
+## Extension points
+
+Extension points are the hooks that Dokka exposes for plugins to attach custom behavior. Dokka provides extension points at every major stage of the documentation pipeline.
+
+### Core extension points
+
+Core extension points sit at the heart of the pipeline and are available regardless of which output format you use. They include:
+
+- **`PreMergeDocumentableTransformer`** — transform documentables before sources are merged across platforms
+- **`DocumentableMerger`** — merge documentables from multiple source sets into a single model
+- **`DocumentableTransformer`** — transform the merged documentable model
+- **`DocumentationToPageTranslator`** — convert documentables into page nodes
+- **`Renderer`** — render page nodes to output files
+
+For a full reference, see the [core extension points](/developer/extension-points) page.
+
+### Base extension points
+
+The `DokkaBase` plugin (bundled with Dokka) registers additional extension points that give you fine-grained control over HTML rendering. These include page transformers, template processors, and output writers.
+
+Refer to the [base extension points](/developer/extension-points) documentation for the complete list.
+
+### Implementing an extension point
+
+To implement an extension point, create a class that implements the corresponding interface, then register it in your `DokkaPlugin` subclass using `extending`:
+
+```kotlin
+class HideInternalApiPlugin : DokkaPlugin() {
+    val myFilterExtension by extending {
+        plugin<DokkaBase>().preMergeDocumentableTransformer providing ::HideInternalApiTransformer
+    }
+}
+
+class HideInternalApiTransformer(context: DokkaContext) :
+    SuppressedByConditionDocumentableFilterTransformer(context) {
+
+    override fun shouldBeSuppressed(d: Documentable): Boolean {
+        // implement your filtering logic here
+        return false
+    }
+}
+```
+
+<Tip>
+  If no suitable extension point exists for your use case, share it with the maintainers on [Kotlin Slack](https://kotlinlang.slack.com) (`#dokka` channel). New extension points are considered for future Dokka releases based on community feedback.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Sample plugin tutorial" icon="graduation-cap" href="/developer/sample-plugin-tutorial">
+    Build a complete plugin step by step, including debugging, manual testing, and writing unit tests.
+  </Card>
+  <Card title="Extension points reference" icon="plug" href="/developer/extension-points">
+    Browse the full list of core and base extension points available to plugins.
+  </Card>
+  <Card title="Architecture overview" icon="sitemap" href="/developer/architecture-overview">
+    Understand the data model and pipeline stages to make better decisions when implementing plugins.
+  </Card>
+  <Card title="Community plugins" icon="shapes" href="https://kotlinlang.org/docs/dokka-plugins.html#notable-plugins">
+    Browse notable community plugins to see how other authors have used the extension point system.
+  </Card>
+</CardGroup>

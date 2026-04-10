@@ -1,97 +1,86 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Dokka: API documentation engine for Kotlin"
+description: "Dokka generates beautiful API documentation from KDoc and Javadoc comments. Supports HTML, Javadoc, and Markdown output for Kotlin and mixed-language projects."
 ---
 
-## Setting up
+Dokka is the official API documentation engine for Kotlin. It reads KDoc comments in Kotlin source files and Javadoc comments in Java source files, then generates comprehensive API reference documentation in multiple output formats — including its own modern HTML format, Javadoc-compatible HTML, and GitHub Flavored Markdown.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Get started" icon="rocket" href="/quickstart">
+    Set up Dokka in your Gradle or Maven project and generate your first documentation in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Gradle runner" icon="box" href="/runners/gradle">
+    The recommended way to run Dokka. Configure the Gradle plugin with full build cache support.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Output formats" icon="file-code" href="/formats/html">
+    Generate HTML, Javadoc-compatible, or Markdown documentation from the same source.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Plugins" icon="puzzle-piece" href="/configuration/plugins">
+    Extend Dokka with community plugins for versioning, Android, MathJax, and more.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is Dokka?
 
-Everything you need to create world-class documentation.
+Dokka understands both Kotlin's KDoc syntax and Java's Javadoc comments, making it ideal for mixed-language JVM projects. You can run it via Gradle, Maven, or a standalone CLI tool.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+Some projects that use Dokka for their API reference:
+- **kotlinx.coroutines** — Kotlin's official concurrency library
+- **Ktor** — Kotlin async web framework
+- **OkHttp** — Square's HTTP client
+- **Gradle** — The build tool itself (Kotlin DSL reference)
 
-## Need inspiration?
+## Choose your runner
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<CardGroup cols={3}>
+  <Card title="Gradle" icon="box" href="/runners/gradle">
+    Full-featured plugin with autoconfiguration, build cache, and multi-project support.
+  </Card>
+  <Card title="Maven" icon="cube" href="/runners/maven">
+    Maven plugin for projects using the Maven build tool.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/runners/cli">
+    Standalone JAR runner for projects not using Gradle or Maven.
+  </Card>
+</CardGroup>
+
+## Quick setup
+
+<Steps>
+  <Step title="Apply the Gradle plugin">
+    Add Dokka to your `build.gradle.kts`:
+
+    ```kotlin build.gradle.kts
+    plugins {
+        id("org.jetbrains.dokka") version "2.2.0"
+    }
+    ```
+  </Step>
+  <Step title="Generate documentation">
+    Run the Gradle task to produce HTML documentation:
+
+    ```bash
+    ./gradlew :dokkaGenerate
+    ```
+  </Step>
+  <Step title="View the output">
+    Open the generated site in your browser. The default output directory is:
+
+    ```
+    build/dokka/html/index.html
+    ```
+  </Step>
+</Steps>
+
+## Extend with plugins
+
+Dokka was built from the ground up to be extensible. Apply community plugins to add new output formats, render diagrams, add version selectors, and more — all without changing your source code.
+
+<CardGroup cols={2}>
+  <Card title="Configure plugins" icon="sliders" href="/configuration/plugins">
+    Learn how to apply and configure Dokka plugins in your project.
+  </Card>
+  <Card title="Develop a plugin" icon="code" href="/developer/introduction">
+    Build your own Dokka plugin using the extension point API.
+  </Card>
+</CardGroup>

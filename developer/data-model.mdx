@@ -1,0 +1,347 @@
+---
+title: "Documentables, pages, and content nodes in Dokka"
+description: "A complete reference to Dokka's three data models — Documentable, Page, and Content — with real Kotlin class examples and an explanation of how they relate."
+---
+
+Dokka's pipeline is built around three successive models: the Documentable model (a language-independent tree of declarations), the Page model (a tree of documentation pages to render), and the Content model (the building blocks on each page). Understanding these three layers — and how data flows between them — is the foundation for writing any non-trivial Dokka plugin.
+
+## Documentable model
+
+The Documentable model is Dokka's in-memory representation of everything parsed from source files. Think of it as a compiler front-end output: it captures declarations, their relationships, their KDoc/Javadoc comments, and per-source-set variations, all in a single language-independent structure.
+
+### Where Documentables come from
+
+Documentables are created by translators that map language-specific compiler models to the unified `Documentable` hierarchy:
+
+| Translator | Source |
+|---|---|
+| `DefaultDescriptorToDocumentableTranslator` | Kotlin (K1 compiler descriptors) |
+| `DefaultSymbolToDocumentableTranslator` | Kotlin (K2 compiler symbols) |
+| `DefaultPsiToDocumentableTranslator` | Java (PSI model) |
+
+### The Documentable tree
+
+When first created, the model is a collection of trees, each rooted at a `DModule`. Given the following Kotlin sources spread across two packages:
+
+```kotlin
+// Package 1
+class Clazz(val property: String) {
+    fun function(parameter: String) {}
+}
+
+fun topLevelFunction() {}
+
+// Package 2
+enum class Enum { }
+
+val topLevelProperty: String
+```
+
+Dokka builds this tree:
+
+```
+DModule
+├── DPackage (Package 1)
+│   ├── DClass
+│   │   ├── DProperty
+│   │   └── DFunction
+│   │       └── DParameter
+│   └── DFunction (topLevelFunction)
+└── DPackage (Package 2)
+    ├── DEnum
+    └── DProperty (topLevelProperty)
+```
+
+All module trees are later folded into one by `DocumentableMerger`.
+
+### The Documentable class
+
+Every node in the tree is a subclass of `Documentable`. Specific subclasses — `DFunction`, `DPackage`, `DProperty`, and so on — have fields that reflect what you would see in the source code. `DClasslike` is the base for all class-like types: `DClass`, `DEnum`, `DAnnotation`, and others.
+
+Here is the full definition of `DClass` to illustrate what a rich Documentable looks like:
+
+```kotlin
+data class DClass(
+    val dri: DRI,
+    val name: String,
+    val constructors: List<DFunction>,
+    val functions: List<DFunction>,
+    val properties: List<DProperty>,
+    val classlikes: List<DClasslike>,
+    val sources: SourceSetDependent<DocumentableSource>,
+    val visibility: SourceSetDependent<Visibility>,
+    val companion: DObject?,
+    val generics: List<DTypeParameter>,
+    val supertypes: SourceSetDependent<List<TypeConstructorWithKind>>,
+    val documentation: SourceSetDependent<DocumentationNode>,
+    val expectPresentInSet: DokkaSourceSet?,
+    val modifier: SourceSetDependent<Modifier>,
+    val sourceSets: Set<DokkaSourceSet>,
+    val isExpectActual: Boolean,
+    val extra: PropertyContainer<DClass> = PropertyContainer.empty()
+) : DClasslike(), WithAbstraction, WithCompanion, WithConstructors,
+    WithGenerics, WithSupertypes, WithExtraProperties<DClass>
+```
+
+### DRI — Dokka Resource Identifier
+
+`DRI` is a stable, unique identifier for a `Documentable`. References between documentables use `DRI` values rather than direct object pointers, so cross-module and cross-source-set references remain valid after merging.
+
+For example, `DFunction` records a parameter's type as a `DRI`, not as a reference to the parameter type's `Documentable` instance.
+
+Given this function from `kotlinx.coroutines`:
+
+```kotlin
+package kotlinx.coroutines
+
+public abstract class MainCoroutineDispatcher : CoroutineDispatcher() {
+    override fun limitedParallelism(parallelism: Int): CoroutineDispatcher { ... }
+}
+```
+
+Its DRI would be constructed as:
+
+```kotlin
+DRI(
+    packageName = "kotlinx.coroutines",
+    classNames = "MainCoroutineDispatcher",
+    callable = Callable(
+        name = "limitedParallelism",
+        receiver = null,
+        params = listOf(
+            TypeConstructor(
+                fullyQualifiedName = "kotlin.Int",
+                params = emptyList()
+            )
+        )
+    ),
+    target = PointingToDeclaration,
+    extra = null
+)
+```
+
+As a string: `kotlinx.coroutines/MainCoroutineDispatcher/limitedParallelism/#kotlin.Int/PointingToDeclaration/`
+
+### SourceSetDependent
+
+`SourceSetDependent<T>` is a type alias for `Map<DokkaSourceSet, T>`. It associates a value with a particular source set, enabling Dokka to represent multiplatform `expect`/`actual` differences — for example, a function whose documentation comment differs between the `expect` and `actual` declarations.
+
+```kotlin
+typealias SourceSetDependent<T> = Map<DokkaSourceSet, T>
+```
+
+### ExtraProperty
+
+`ExtraProperty` stores information that doesn't fit the standard model fields. It is the recommended mechanism for plugin authors to attach custom metadata to any `Documentable` or `ContentNode`.
+
+```kotlin
+// Extra that is applicable only to DFunction
+data class CustomExtra(val customExtraValue: String) : ExtraProperty<DFunction> {
+    override val key: ExtraProperty.Key<Documentable, *> = CustomExtra
+    companion object: ExtraProperty.Key<Documentable, CustomExtra>
+}
+
+// Storing it inside the documentable
+fun DFunction.withCustomExtraProperty(data: String): DFunction {
+    return this.copy(
+        extra = extra + CustomExtra(data)
+    )
+}
+
+// Retrieving it from the documentable
+fun DFunction.getCustomExtraPropertyValue(): String? {
+    return this.extra[CustomExtra]?.customExtraValue
+}
+```
+
+You can also use extras as marker flags with no payload:
+
+```kotlin
+object MarkerExtra : ExtraProperty<Any>, ExtraProperty.Key<Any, MarkerExtra> {
+    override val key: ExtraProperty.Key<Any, *> = this
+}
+
+fun Documentable.markIfFunction(): Documentable {
+    return when(this) {
+        is DFunction -> this.copy(extra = extra + MarkerExtra)
+        else -> this
+    }
+}
+
+fun WithExtraProperties<Documentable>.isMarked(): Boolean {
+    return this.extra[MarkerExtra] != null
+}
+```
+
+<Tip>
+  All extras are propagated from the Documentable model into the Content model, so a `Renderer` can read them when deciding how to render a node.
+</Tip>
+
+All extras for both `Documentable` and `ContentNode` objects are stored in `PropertyContainer<C>` instances. The type parameter `C` constrains which extras can be stored in a given container, preventing type mismatches at compile time.
+
+## Documentation model
+
+The documentation model sits alongside the Documentable model and holds data parsed from KDoc and Javadoc comments.
+
+<AccordionGroup>
+  <Accordion title="DocTag">
+    `DocTag` represents a single documentation syntax element, universal across source languages. `B` (bold) is the same `DocTag` regardless of whether the source was `**bold**` in Kotlin or `<b>bold</b>` in Java. Tags can be deeply nested.
+
+    ```kotlin
+    data class H1(
+        override val children: List<DocTag> = emptyList(),
+        override val params: Map<String, String> = emptyMap()
+    ) : DocTag()
+
+    data class Strong(
+        override val children: List<DocTag> = emptyList(),
+        override val params: Map<String, String> = emptyMap()
+    ) : DocTag()
+
+    data class CodeBlock(
+        override val children: List<DocTag> = emptyList(),
+        override val params: Map<String, String> = emptyMap()
+    ) : Code()
+    ```
+  </Accordion>
+
+  <Accordion title="TagWrapper">
+    `TagWrapper` represents a whole comment section or a specific tag such as `@see`, `@author`, or `@return`. Each `TagWrapper` contains `DocTag` children for its formatted content.
+
+    ```kotlin
+    /**
+     * @author **Ben Affleck**
+     * @return nothing, except _sometimes_ it may throw an [Error]
+     */
+    fun foo() {}
+    ```
+  </Accordion>
+
+  <Accordion title="DocumentationNode">
+    `DocumentationNode` is a container for all `TagWrapper` elements belonging to one `Documentable`:
+
+    ```kotlin
+    data class DFunction(
+        ...
+        val documentation: SourceSetDependent<DocumentationNode>,
+        ...
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Page model
+
+The Page model describes the documentation pages that will be generated. Each `PageNode` maps to exactly one output file; the `Renderer` decides the file's extension and format.
+
+The page tree is rooted at `RootPageNode`. Concrete subtypes include `ModulePage`, `PackagePage`, `ClasslikePage`, and `MemberPage`. For a project with one module containing three packages — the first of which has a top-level function, a top-level property, and a class with its own function and property — the tree looks like this:
+
+```
+RootPageNode
+├── PackagePageNode
+│   ├── MemberPageNode (Function)
+│   ├── MemberPageNode (Property)
+│   └── ClasslikePageNode (Class)
+│       ├── MemberPageNode (Function)
+│       └── MemberPageNode (Property)
+├── PackagePageNode
+│   └── ...
+└── PackagePageNode
+    └── ...
+```
+
+Almost all pages are subtypes of `ContentPage`, meaning they carry user-visible content.
+
+<Note>
+  The Page model is output-format independent. Whether a `PageNode` becomes an `.html` file or a `.md` file is determined solely by the `Renderer` extension.
+</Note>
+
+## Content model
+
+The Content model describes the visual building blocks on each page. It is a set of `ContentNode` subtypes that a `Renderer` maps to format-specific output.
+
+Key subtypes include `ContentText`, `ContentList`, `ContentTable`, `ContentCodeBlock`, `ContentHeader`, and `ContentGroup`. You compose them using the `DocumentableContentBuilder` DSL:
+
+```kotlin
+// Real example of composing content using the DocumentableContentBuilder DSL
+orderedList {
+    item {
+        text("This list contains a nested table:")
+        table {
+            header {
+                text("Col1")
+                text("Col2")
+            }
+            row {
+                text("Text1")
+                text("Text2")
+            }
+        }
+    }
+    item {
+        group(styles = setOf(TextStyle.Bold)) {
+            text("This is bold")
+            text("This is also bold")
+        }
+    }
+}
+```
+
+### DCI — Dokka Content Identifier
+
+Each `ContentNode` carries a `DCI` that aggregates the `DRI`s of all documentables contributing to that node, plus a `Kind` discriminator:
+
+```kotlin
+data class DCI(val dri: Set<DRI>, val kind: Kind)
+```
+
+### ContentKind
+
+`ContentKind` groups related content within a composite page. A class page typically has separate `ContentKind` blocks for constructors, functions, properties, and so on — each potentially rendered as its own tab or section.
+
+### Styles
+
+Every `ContentNode` has a `styles` property. `Renderer` implementations interpret styles to produce the appropriate markup:
+
+```kotlin
+group(styles = setOf(TextStyle.Paragraph)) {
+    text("Text1", styles = setOf(TextStyle.Bold))
+    text("Text2", styles = setOf(TextStyle.Italic))
+}
+```
+
+Dokka ships with three built-in style enums:
+
+```kotlin
+// For syntax highlighting
+enum class TokenStyle : Style {
+    Keyword, Punctuation, Function, Operator, Annotation,
+    Number, String, Boolean, Constant, Builtin, ...
+}
+
+enum class TextStyle : Style {
+    Bold, Italic, Strong, Strikethrough, Paragraph, ...
+}
+
+enum class ContentStyle : Style {
+    TabbedContent, RunnableSample, Wrapped, Indented, ...
+}
+```
+
+`HtmlRenderer` supports all of these out of the box. `CommonmarkRenderer` renders the same styles using Markdown syntax.
+
+## How the three models relate
+
+<Steps>
+  <Step title="Source → Documentables">
+    A `SourceToDocumentableTranslator` reads source files and produces `Documentable` trees, one per module. Optional `PreMergeDocumentableTransformer` passes filter or annotate the trees. `DocumentableMerger` folds them into a single tree. Further `DocumentableTransformer` passes run after merging.
+  </Step>
+
+  <Step title="Documentables → Pages">
+    `DocumentableToPageTranslator` walks the merged Documentable tree and produces a `PageNode` tree. Each `Documentable` typically maps to one or more `PageNode`s, and each `PageNode` is populated with `ContentNode`s built from the documentable's data and documentation. `ExtraProperty` values are propagated into `ContentNode` extras at this stage.
+  </Step>
+
+  <Step title="Pages → Output">
+    `PageTransformer` extensions can add, remove, or restructure pages before rendering. Finally, `Renderer` walks the page tree and writes files — one per `PageNode` — translating each `ContentNode` into the target format.
+  </Step>
+</Steps>

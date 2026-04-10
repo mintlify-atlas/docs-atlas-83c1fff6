@@ -1,0 +1,76 @@
+---
+title: "What is Dokka? API docs engine for Kotlin"
+description: "Dokka reads KDoc and Javadoc comments from Kotlin and Java source files and generates API reference docs in HTML, Javadoc, and Markdown formats."
+keywords: ["dokka", "kotlin", "api documentation", "kdoc", "javadoc", "gradle", "maven"]
+---
+
+Dokka is the official API documentation engine for Kotlin. It reads [KDoc comments](https://kotlinlang.org/docs/kotlin-doc.html#kdoc-syntax) from Kotlin source files and [Javadoc comments](https://www.oracle.com/technical-resources/articles/java/javadoc-tool.html) from Java source files, then generates comprehensive API reference documentation in multiple output formats. Because Dokka understands both languages natively, it works seamlessly with mixed-language JVM projects without any extra configuration.
+
+## Supported source languages
+
+Dokka processes documentation comments written in two formats:
+
+- **KDoc** — Kotlin's native documentation syntax, supporting inline markup, tags like `@param`, `@return`, and `@throws`, and markdown formatting.
+- **Javadoc** — Java's established documentation format, fully supported so that existing Java libraries integrate without changes.
+
+## Output formats
+
+<CardGroup cols={3}>
+  <Card title="HTML" icon="globe" href="/formats/html">
+    Dokka's default format. A modern, searchable HTML site with full navigation and source links.
+  </Card>
+  <Card title="Javadoc" icon="java" href="/formats/javadoc">
+    A Javadoc-lookalike HTML format. All Kotlin signatures are translated to Java. Alpha stability.
+  </Card>
+  <Card title="Markdown" icon="file-lines" href="/formats/markdown">
+    GitHub Flavored Markdown and Jekyll-compatible output. Useful for embedding docs in repositories. Alpha stability.
+  </Card>
+</CardGroup>
+
+<Note>
+  The HTML format is recommended for production use. The Javadoc and Markdown formats are in Alpha and may have bugs or migration issues.
+</Note>
+
+## How to run Dokka
+
+You can run Dokka in three ways depending on your build setup:
+
+<CardGroup cols={3}>
+  <Card title="Gradle" icon="box" href="/runners/gradle">
+    The recommended approach. Supports build cache, configuration cache, and multi-project aggregation.
+  </Card>
+  <Card title="Maven" icon="cube" href="/runners/maven">
+    Add the Maven plugin to your POM file and run `dokka:dokka` as part of the site lifecycle.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/runners/cli">
+    A standalone JAR runner for projects that don't use Gradle or Maven.
+  </Card>
+</CardGroup>
+
+## Projects using Dokka
+
+Dokka is used by some of the most widely-used libraries in the Kotlin and JVM ecosystems:
+
+- [kotlinx.coroutines](https://kotlinlang.org/api/kotlinx.coroutines/) — Kotlin's official concurrency library
+- [Ktor](https://api.ktor.io/) — Kotlin async web framework
+- [OkHttp](https://square.github.io/okhttp/5.x/okhttp/okhttp3/) — Square's HTTP client for the JVM
+- [Gradle](https://docs.gradle.org/current/kotlin-dsl/index.html) — The Kotlin DSL API reference for Gradle itself
+- [Bitmovin](https://cdn.bitmovin.com/player/android/3/docs/index.html) — Android media player SDK
+- [Hexagon](https://hexagontk.com/stable/api/) — Kotlin microservices toolkit
+
+## Extensibility
+
+Dokka was designed from the ground up to be pluggable. You can extend it with community plugins that add features like version selectors, custom output formats, Android-specific documentation improvements, and more. You can also write your own Dokka plugins using the extension point API.
+
+<CardGroup cols={2}>
+  <Card title="Configure plugins" icon="sliders" href="/configuration/plugins">
+    Apply and configure Dokka plugins in your Gradle or Maven project.
+  </Card>
+  <Card title="Develop a plugin" icon="code" href="/developer/introduction">
+    Build custom Dokka plugins using the extension point API.
+  </Card>
+</CardGroup>
+
+## Community
+
+Dokka has a dedicated `#dokka` channel in [Kotlin Community Slack](https://kotl.in/slack) where you can ask questions, discuss plugins, and get in touch with the maintainers directly.

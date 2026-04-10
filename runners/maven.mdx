@@ -1,0 +1,346 @@
+---
+title: "Maven plugin for Dokka: goals, config, and javadoc.jar"
+description: "Add dokka-maven-plugin to your POM, run dokka:dokka to generate HTML docs, configure source links and package options, and build a javadoc.jar for publishing."
+keywords: ["dokka", "maven", "kotlin", "dokka-maven-plugin", "javadoc", "pom.xml", "api documentation"]
+---
+
+The Maven plugin for Dokka lets you generate API reference documentation for Maven-based Kotlin projects without leaving your existing build setup. You declare the plugin in your POM, run a Maven goal, and Dokka produces documentation from your source code. This page covers plugin setup, available goals, configuration options, and how to produce a `javadoc.jar` for publishing to repositories like Maven Central.
+
+<Note>
+  Compared to the Gradle plugin, the Maven plugin has only basic features and does not support multi-module builds. For complex projects, consider the [Gradle runner](/runners/gradle) instead. You can also explore a working example in the [Dokka Maven example project](https://github.com/Kotlin/dokka/tree/2.0.0/examples/maven).
+</Note>
+
+## Apply the plugin
+
+Add `dokka-maven-plugin` to the `plugins` section of your `pom.xml`:
+
+```xml pom.xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.jetbrains.dokka</groupId>
+            <artifactId>dokka-maven-plugin</artifactId>
+            <version>2.2.0</version>
+            <executions>
+                <execution>
+                    <phase>pre-site</phase>
+                    <goals>
+                        <goal>dokka</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+```
+
+The plugin is bound to the `pre-site` lifecycle phase by default, so it runs automatically when you execute `mvn site`.
+
+## Available goals
+
+The Maven plugin provides the following goals:
+
+| Goal | Description |
+|------|-------------|
+| `dokka:dokka` | Generates documentation with Dokka plugins applied. Produces HTML output by default. |
+| `dokka:javadoc` | Generates documentation in Javadoc format. |
+| `dokka:javadocJar` | Generates a `javadoc.jar` containing documentation in Javadoc format. |
+
+<Warning>
+  The `dokka:javadoc` and `dokka:javadocJar` goals are experimental. You may encounter bugs or incompatibilities with tools that consume Javadoc as input.
+</Warning>
+
+### Other output formats
+
+By default, `dokka:dokka` generates HTML output. All other formats are implemented as Dokka plugins. To use a different format, add the corresponding plugin artifact to the `dokkaPlugins` configuration block.
+
+For example, to generate documentation in GFM format:
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <version>2.2.0</version>
+    <configuration>
+        <dokkaPlugins>
+            <plugin>
+                <groupId>org.jetbrains.dokka</groupId>
+                <artifactId>gfm-plugin</artifactId>
+                <version>2.2.0</version>
+            </plugin>
+        </dokkaPlugins>
+    </configuration>
+</plugin>
+```
+
+Running `dokka:dokka` with this configuration generates GFM output instead of HTML. See the [plugins documentation](/configuration/plugins) for more information.
+
+## Build a javadoc.jar
+
+If you are publishing to Maven Central or another repository that requires a `javadoc.jar`, you can use the built-in `dokka:javadocJar` goal. It generates a JAR containing Javadoc-format documentation in the `target` directory.
+
+To generate a `javadoc.jar` with HTML content instead of Javadoc, use the Maven JAR plugin with a custom execution:
+
+```xml pom.xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-jar-plugin</artifactId>
+    <version>3.3.0</version>
+    <executions>
+        <execution>
+            <goals>
+                <goal>test-jar</goal>
+            </goals>
+        </execution>
+        <execution>
+            <id>dokka-jar</id>
+            <phase>package</phase>
+            <goals>
+                <goal>jar</goal>
+            </goals>
+            <configuration>
+                <classifier>dokka</classifier>
+                <classesDirectory>${project.build.directory}/dokka</classesDirectory>
+                <skipIfEmpty>true</skipIfEmpty>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+```
+
+Then run the following to generate both the documentation and the JAR:
+
+```bash
+mvn dokka:dokka jar:jar@dokka-jar
+```
+
+<Tip>
+  If you publish to Maven Central, [javadoc.io](https://javadoc.io/) can host your library's API documentation for free. It reads directly from the `javadoc.jar` and works well with Dokka's HTML output format.
+</Tip>
+
+## Configuration options
+
+All configuration goes in the `<configuration>` block of the plugin declaration. Below is a basic example that changes the output directory:
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <version>2.2.0</version>
+    <configuration>
+        <outputDir>${project.basedir}/target/documentation/dokka</outputDir>
+    </configuration>
+</plugin>
+```
+
+### General configuration
+
+The following options are available in the top-level `<configuration>` block:
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <configuration>
+        <skip>false</skip>
+        <moduleName>${project.artifactId}</moduleName>
+        <outputDir>${project.basedir}/target/documentation</outputDir>
+        <failOnWarning>false</failOnWarning>
+        <suppressObviousFunctions>true</suppressObviousFunctions>
+        <suppressInheritedMembers>false</suppressInheritedMembers>
+        <offlineMode>false</offlineMode>
+        <sourceDirectories>
+            <dir>${project.basedir}/src</dir>
+        </sourceDirectories>
+        <documentedVisibilities>
+            <visibility>PUBLIC</visibility>
+            <visibility>PROTECTED</visibility>
+        </documentedVisibilities>
+        <reportUndocumented>false</reportUndocumented>
+        <skipDeprecated>false</skipDeprecated>
+        <skipEmptyPackages>true</skipEmptyPackages>
+        <jdkVersion>8</jdkVersion>
+        <languageVersion>1.7</languageVersion>
+        <apiVersion>1.7</apiVersion>
+        <noStdlibLink>false</noStdlibLink>
+        <noJdkLink>false</noJdkLink>
+        <includes>
+            <include>packages.md</include>
+            <include>extra.md</include>
+        </includes>
+        <classpath>${project.compileClasspathElements}</classpath>
+        <samples>
+            <dir>${project.basedir}/samples</dir>
+        </samples>
+    </configuration>
+</plugin>
+```
+
+Key options explained:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `skip` | `false` | Skips documentation generation entirely when set to `true`. |
+| `moduleName` | `${project.artifactId}` | Display name used in the table of contents and navigation. |
+| `outputDir` | `target/dokka` | Directory where documentation is written. |
+| `failOnWarning` | `false` | Fails the build if Dokka emits any warnings or errors. Works well with `reportUndocumented`. |
+| `suppressObviousFunctions` | `true` | Suppresses functions inherited from `kotlin.Any` and `java.lang.Object`, and undocumented synthetic functions. |
+| `suppressInheritedMembers` | `false` | Suppresses inherited members that are not explicitly overridden. |
+| `offlineMode` | `false` | Skips remote network calls for package lists. Can speed up builds but reduces link quality. |
+| `documentedVisibilities` | `PUBLIC` | Controls which visibility modifiers are included in the documentation. |
+| `reportUndocumented` | `false` | Emits warnings for visible declarations that lack KDoc comments. |
+| `skipDeprecated` | `false` | Omits declarations annotated with `@Deprecated`. |
+| `jdkVersion` | `8` | JDK version used for generating external links to Java types. |
+
+### Source link configuration
+
+The `sourceLinks` block adds a "source" link to each declaration signature, pointing to the corresponding line in your source code hosting service.
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <configuration>
+        <sourceLinks>
+            <link>
+                <path>src</path>
+                <url>https://github.com/kotlin/dokka/tree/master/src</url>
+                <lineSuffix>#L</lineSuffix>
+            </link>
+        </sourceLinks>
+    </configuration>
+</plugin>
+```
+
+| Field | Description |
+|-------|-------------|
+| `path` | Path to the local source directory, relative to the module root. Only Unix-style paths are accepted. |
+| `url` | URL of the source code hosting service (GitHub, GitLab, Bitbucket, etc.). |
+| `lineSuffix` | Suffix appended before the line number. Use `#L` for GitHub and GitLab, `#lines-` for Bitbucket. |
+
+### External documentation links
+
+The `externalDocumentationLinks` block makes types from external libraries clickable in your documentation by linking to their hosted API references.
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <configuration>
+        <externalDocumentationLinks>
+            <link>
+                <url>https://kotlinlang.org/api/kotlinx.serialization/</url>
+                <packageListUrl>file:/${project.basedir}/serialization.package.list</packageListUrl>
+            </link>
+        </externalDocumentationLinks>
+    </configuration>
+</plugin>
+```
+
+By default, external documentation links for the Kotlin standard library and JDK are already configured. The `packageListUrl` field is optional — Dokka attempts to resolve the `package-list` file automatically from the provided `url`.
+
+### Package options
+
+The `perPackageOptions` block lets you override settings for specific packages matched by a regular expression.
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <configuration>
+        <perPackageOptions>
+            <packageOptions>
+                <matchingRegex>.*api.*</matchingRegex>
+                <suppress>false</suppress>
+                <reportUndocumented>false</reportUndocumented>
+                <skipDeprecated>false</skipDeprecated>
+                <documentedVisibilities>
+                    <visibility>PUBLIC</visibility>
+                    <visibility>PRIVATE</visibility>
+                    <visibility>PROTECTED</visibility>
+                    <visibility>INTERNAL</visibility>
+                    <visibility>PACKAGE</visibility>
+                </documentedVisibilities>
+            </packageOptions>
+        </perPackageOptions>
+    </configuration>
+</plugin>
+```
+
+### Complete configuration
+
+The following example shows all available configuration options applied at once:
+
+```xml pom.xml
+<plugin>
+    <groupId>org.jetbrains.dokka</groupId>
+    <artifactId>dokka-maven-plugin</artifactId>
+    <configuration>
+        <skip>false</skip>
+        <moduleName>${project.artifactId}</moduleName>
+        <outputDir>${project.basedir}/target/documentation</outputDir>
+        <failOnWarning>false</failOnWarning>
+        <suppressObviousFunctions>true</suppressObviousFunctions>
+        <suppressInheritedMembers>false</suppressInheritedMembers>
+        <offlineMode>false</offlineMode>
+        <sourceDirectories>
+            <dir>${project.basedir}/src</dir>
+        </sourceDirectories>
+        <documentedVisibilities>
+            <visibility>PUBLIC</visibility>
+            <visibility>PRIVATE</visibility>
+            <visibility>PROTECTED</visibility>
+            <visibility>INTERNAL</visibility>
+            <visibility>PACKAGE</visibility>
+        </documentedVisibilities>
+        <reportUndocumented>false</reportUndocumented>
+        <skipDeprecated>false</skipDeprecated>
+        <skipEmptyPackages>true</skipEmptyPackages>
+        <suppressedFiles>
+            <file>/path/to/dir</file>
+            <file>/path/to/file</file>
+        </suppressedFiles>
+        <jdkVersion>8</jdkVersion>
+        <languageVersion>1.7</languageVersion>
+        <apiVersion>1.7</apiVersion>
+        <noStdlibLink>false</noStdlibLink>
+        <noJdkLink>false</noJdkLink>
+        <includes>
+            <include>packages.md</include>
+            <include>extra.md</include>
+        </includes>
+        <classpath>${project.compileClasspathElements}</classpath>
+        <samples>
+            <dir>${project.basedir}/samples</dir>
+        </samples>
+        <sourceLinks>
+            <link>
+                <path>src</path>
+                <url>https://github.com/kotlin/dokka/tree/master/src</url>
+                <lineSuffix>#L</lineSuffix>
+            </link>
+        </sourceLinks>
+        <externalDocumentationLinks>
+            <link>
+                <url>https://kotlinlang.org/api/core/kotlin-stdlib/</url>
+                <packageListUrl>file:/${project.basedir}/stdlib.package.list</packageListUrl>
+            </link>
+        </externalDocumentationLinks>
+        <perPackageOptions>
+            <packageOptions>
+                <matchingRegex>.*api.*</matchingRegex>
+                <suppress>false</suppress>
+                <reportUndocumented>false</reportUndocumented>
+                <skipDeprecated>false</skipDeprecated>
+                <documentedVisibilities>
+                    <visibility>PUBLIC</visibility>
+                    <visibility>PRIVATE</visibility>
+                    <visibility>PROTECTED</visibility>
+                    <visibility>INTERNAL</visibility>
+                    <visibility>PACKAGE</visibility>
+                </documentedVisibilities>
+            </packageOptions>
+        </perPackageOptions>
+    </configuration>
+</plugin>
+```

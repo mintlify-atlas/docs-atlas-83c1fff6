@@ -1,0 +1,224 @@
+---
+title: "Export Dokka API docs as Markdown for GitHub and Jekyll"
+description: "Dokka supports GitHub Flavored Markdown and Jekyll Markdown output formats, letting you embed API reference docs into wikis, GitHub Pages, and static sites."
+keywords: ["dokka", "markdown", "gfm", "jekyll", "output format", "github pages", "api documentation"]
+---
+
+Dokka can generate API documentation as Markdown instead of HTML, making it easy to embed reference content directly into GitHub wikis, repository README files, GitHub Pages sites, or any static site generator that accepts Markdown as input. Two Markdown output formats are available: GitHub Flavored Markdown (GFM) and Jekyll Flavored Markdown. Both are implemented as Dokka plugins and both support multi-project builds and Kotlin Multiplatform projects.
+
+<Warning>
+  Both the GFM and Jekyll Markdown output formats are in **Alpha** stability. You may encounter bugs and migration issues. The Jekyll plugin is at an especially early stage. Feel free to [report any issues](https://github.com/Kotlin/dokka/issues/new/choose) you encounter.
+</Warning>
+
+## GitHub Flavored Markdown (GFM)
+
+The GFM plugin generates documentation in [GitHub Flavored Markdown](https://github.github.com/gfm/) format. The output can be embedded directly into GitHub-hosted documentation such as GitHub Pages or repository README files, and it renders natively on GitHub without any additional tooling.
+
+### Enable GFM output
+
+<Tabs>
+  <Tab title="Gradle">
+    The GFM format is integrated with the Dokka Gradle plugin through a custom `DokkaFormatPlugin`. Declare the plugin in your build script (directly, in `build-logic`, or inside a convention plugin), then apply it alongside the standard Dokka plugin:
+
+    ```kotlin
+    // build.gradle.kts
+    plugins {
+        id("org.jetbrains.dokka")
+    }
+
+    @OptIn(InternalDokkaGradlePluginApi::class)
+    abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {
+        override fun DokkaFormatPlugin.DokkaFormatPluginContext.configure() {
+            project.dependencies {
+                // Sets up generation for the current project
+                dokkaPlugin(dokka("gfm-plugin"))
+
+                // Sets up multi-project generation
+                formatDependencies.dokkaPublicationPluginClasspathApiOnly.dependencies.addLater(
+                    dokka("gfm-template-processing-plugin")
+                )
+            }
+        }
+    }
+
+    apply<DokkaMarkdownPlugin>()
+    ```
+
+    Apply this plugin in every subproject you want to document, including the root project if you are aggregating documentation.
+
+    Once applied, run either of these tasks:
+
+    | Task | Description |
+    |------|-------------|
+    | `dokkaGenerateMarkdown` | Generates documentation in Markdown format only |
+    | `dokkaGenerate` | Generates documentation in all available formats based on applied plugins |
+
+    ```shell
+    ./gradlew :dokkaGenerateMarkdown
+    ```
+  </Tab>
+  <Tab title="Maven">
+    Add the `gfm-plugin` as a Dokka plugin dependency in your `pom.xml`:
+
+    ```xml
+    <plugin>
+        <groupId>org.jetbrains.dokka</groupId>
+        <artifactId>dokka-maven-plugin</artifactId>
+        <configuration>
+            <dokkaPlugins>
+                <plugin>
+                    <groupId>org.jetbrains.dokka</groupId>
+                    <artifactId>gfm-plugin</artifactId>
+                    <version>2.2.0</version>
+                </plugin>
+            </dokkaPlugins>
+        </configuration>
+    </plugin>
+    ```
+
+    Then run the `dokka:dokka` goal to generate GFM output:
+
+    ```shell
+    mvn dokka:dokka
+    ```
+  </Tab>
+  <Tab title="CLI">
+    Download the [`gfm-plugin` JAR](https://repo1.maven.org/maven2/org/jetbrains/dokka/gfm-plugin/) and pass it to `pluginsClasspath`.
+
+    Via command line options:
+
+    ```bash
+    java -jar dokka-cli-2.2.0.jar \
+         -pluginsClasspath "./dokka-base-2.2.0.jar;...;./gfm-plugin-2.2.0.jar" \
+         ...
+    ```
+
+    Via JSON configuration:
+
+    ```json
+    {
+      "pluginsClasspath": [
+        "./dokka-base-2.2.0.jar",
+        "...",
+        "./gfm-plugin-2.2.0.jar"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Jekyll Markdown
+
+The Jekyll plugin generates documentation in [Jekyll](https://jekyllrb.com/) Flavored Markdown format. The output is compatible with Jekyll's site generation pipeline, making it suitable for GitHub Pages sites that use Jekyll as their build system. Like the GFM plugin, it supports multi-project builds and Kotlin Multiplatform projects.
+
+<Note>
+  The Jekyll plugin is built on top of the GFM plugin. When using the CLI runner, you must include both JARs in `pluginsClasspath`.
+</Note>
+
+### Enable Jekyll output
+
+<Tabs>
+  <Tab title="Gradle">
+    Declare a `DokkaFormatPlugin` using the `jekyll-plugin` dependency, then apply it to every subproject (and the root project if you aggregate documentation):
+
+    ```kotlin
+    // build.gradle.kts
+    plugins {
+        id("org.jetbrains.dokka")
+    }
+
+    @OptIn(InternalDokkaGradlePluginApi::class)
+    abstract class DokkaMarkdownPlugin : DokkaFormatPlugin(formatName = "markdown") {
+        override fun DokkaFormatPlugin.DokkaFormatPluginContext.configure() {
+            project.dependencies {
+                // Sets up generation for the current project
+                dokkaPlugin(dokka("jekyll-plugin"))
+
+                // Sets up multi-project generation
+                formatDependencies.dokkaPublicationPluginClasspathApiOnly.dependencies.addLater(
+                    dokka("jekyll-template-processing-plugin")
+                )
+            }
+        }
+    }
+
+    apply<DokkaMarkdownPlugin>()
+    ```
+
+    Once applied, run either of these tasks:
+
+    | Task | Description |
+    |------|-------------|
+    | `dokkaGenerateMarkdown` | Generates documentation in Markdown format only |
+    | `dokkaGenerate` | Generates documentation in all available formats based on applied plugins |
+
+    ```shell
+    ./gradlew :dokkaGenerateMarkdown
+    ```
+  </Tab>
+  <Tab title="Maven">
+    Add the `jekyll-plugin` as a Dokka plugin dependency in your `pom.xml`:
+
+    ```xml
+    <plugin>
+        <groupId>org.jetbrains.dokka</groupId>
+        <artifactId>dokka-maven-plugin</artifactId>
+        <configuration>
+            <dokkaPlugins>
+                <plugin>
+                    <groupId>org.jetbrains.dokka</groupId>
+                    <artifactId>jekyll-plugin</artifactId>
+                    <version>2.2.0</version>
+                </plugin>
+            </dokkaPlugins>
+        </configuration>
+    </plugin>
+    ```
+
+    Then run the `dokka:dokka` goal to generate Jekyll Markdown output:
+
+    ```shell
+    mvn dokka:dokka
+    ```
+  </Tab>
+  <Tab title="CLI">
+    Download both the [`gfm-plugin` JAR](https://repo1.maven.org/maven2/org/jetbrains/dokka/gfm-plugin/) and the [`jekyll-plugin` JAR](https://repo1.maven.org/maven2/org/jetbrains/dokka/jekyll-plugin/) and pass both to `pluginsClasspath`.
+
+    Via command line options:
+
+    ```bash
+    java -jar dokka-cli-2.2.0.jar \
+         -pluginsClasspath "./dokka-base-2.2.0.jar;...;./gfm-plugin-2.2.0.jar;./jekyll-plugin-2.2.0.jar" \
+         ...
+    ```
+
+    Via JSON configuration:
+
+    ```json
+    {
+      "pluginsClasspath": [
+        "./dokka-base-2.2.0.jar",
+        "...",
+        "./gfm-plugin-2.2.0.jar",
+        "./jekyll-plugin-2.2.0.jar"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Format comparison
+
+| Feature | GFM | Jekyll |
+|---------|-----|--------|
+| Stability | Alpha | Alpha |
+| Multi-project builds | Yes | Yes |
+| Kotlin Multiplatform | Yes | Yes |
+| GitHub rendering | Native | Requires Jekyll build step |
+| GitHub Pages | Direct (no build step) | Via Jekyll pipeline |
+| Plugin artifact | `gfm-plugin` | `jekyll-plugin` (depends on `gfm-plugin`) |
+| Gradle task | `dokkaGenerateMarkdown` | `dokkaGenerateMarkdown` |
+
+<Tip>
+  Use GFM when you want documentation that renders directly on GitHub — in a wiki, repository README, or a GitHub Pages site that does not use Jekyll. Use Jekyll Markdown when your GitHub Pages site is already built with Jekyll and you want the documentation to integrate with your existing site templates and front matter.
+</Tip>

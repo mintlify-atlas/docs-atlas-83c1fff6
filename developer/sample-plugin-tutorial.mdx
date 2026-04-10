@@ -1,0 +1,304 @@
+---
+title: "Build a Dokka plugin that filters annotated members"
+description: "Step-by-step tutorial: create a Dokka plugin that hides members marked with a custom @Internal annotation using PreMergeDocumentableTransformer."
+keywords: ["dokka plugin tutorial", "hide internal api", "annotation filtering", "PreMergeDocumentableTransformer", "DokkaPlugin", "plugin example"]
+---
+
+This tutorial walks you through building a complete Dokka plugin from scratch. The plugin solves a common real-world problem: excluding members annotated with a custom `@Internal` annotation from generated documentation. By the end, you will have a working plugin, a debugging workflow, and a passing unit test.
+
+The plugin will be tested against the following source code:
+
+```kotlin
+package org.jetbrains.dokka.internal.test
+
+annotation class Internal
+
+fun shouldBeVisible() {}
+
+@Internal
+fun shouldBeExcludedFromDocumentation() {}
+```
+
+Expected behavior: `shouldBeExcludedFromDocumentation` does not appear in the generated documentation. `shouldBeVisible` does.
+
+The complete source code for this tutorial is available in the Dokka repository under [examples/plugin/hide-internal-api](https://github.com/Kotlin/dokka/tree/master/examples/plugin/hide-internal-api).
+
+## Prerequisites
+
+Before starting, read [Plugin development](/developer/plugin-development) to understand how plugins are structured and registered. Familiarity with Gradle's Kotlin DSL is assumed.
+
+## Tutorial
+
+<Steps>
+  <Step title="Set up the project from the plugin template">
+    Start from the [Dokka plugin template](https://github.com/Kotlin/dokka-plugin-template). Click **Use this template** on GitHub, then open the project in IntelliJ IDEA.
+
+    The template ships with a pre-made plugin class called `MyAwesomeDokkaPlugin` inside the `template` package. Rename the package and class to match your plugin. For this tutorial, rename the package to `org.example.dokka.plugin` and the class to `HideInternalApiPlugin`:
+
+    ```kotlin
+    package org.example.dokka.plugin
+
+    import org.jetbrains.dokka.plugability.DokkaPlugin
+
+    class HideInternalApiPlugin : DokkaPlugin() {
+
+    }
+    ```
+
+    After renaming, update the ServiceLoader registration file at:
+
+    ```
+    resources/META-INF/services/org.jetbrains.dokka.plugability.DokkaPlugin
+    ```
+
+    Replace its contents with the new fully qualified class name:
+
+    ```
+    org.example.dokka.plugin.HideInternalApiPlugin
+    ```
+
+    You can also update the project name in `settings.gradle.kts` (use `hide-internal-api`) and the `groupId` in `build.gradle.kts` at this point.
+  </Step>
+  <Step title="Create the transformer class">
+    The pipeline stage you need is `PreMergeDocumentableTransformer`. Dokka's base plugin provides a convenient abstract class — `SuppressedByConditionDocumentableFilterTransformer` — that handles the boilerplate of filtering documentables. You only need to implement `shouldBeSuppressed`.
+
+    Create a new file next to your plugin class and implement the abstract method:
+
+    ```kotlin
+    package org.example.dokka.plugin
+
+    import org.jetbrains.dokka.base.transformers.documentables.SuppressedByConditionDocumentableFilterTransformer
+    import org.jetbrains.dokka.model.Documentable
+    import org.jetbrains.dokka.plugability.DokkaContext
+    import org.jetbrains.dokka.plugability.DokkaPlugin
+
+    class HideInternalApiPlugin : DokkaPlugin() {}
+
+    class HideInternalApiTransformer(context: DokkaContext) :
+        SuppressedByConditionDocumentableFilterTransformer(context) {
+
+        override fun shouldBeSuppressed(d: Documentable): Boolean {
+            return false
+        }
+    }
+    ```
+
+    The method currently always returns `false` (suppress nothing). You will implement the real logic after exploring the data model in the debugger.
+  </Step>
+  <Step title="Register the extension with your plugin">
+    Wire your transformer into the plugin by declaring it as an extension inside the `HideInternalApiPlugin` class body:
+
+    ```kotlin
+    class HideInternalApiPlugin : DokkaPlugin() {
+        val myFilterExtension by extending {
+            plugin<DokkaBase>().preMergeDocumentableTransformer providing ::HideInternalApiTransformer
+        }
+    }
+    ```
+
+    The plugin now compiles and loads, but does nothing yet. This is a good point to set up local debugging.
+  </Step>
+  <Step title="Debug the plugin locally">
+    Publishing your plugin to Maven Local lets you attach a debugger to a real Dokka run and inspect the `Documentable` objects your transformer receives.
+
+    First, publish the plugin:
+
+    ```bash
+    ./gradlew publishToMavenLocal
+    ```
+
+    This publishes the plugin under the `groupId`, `artifactId`, and `version` from your `build.gradle.kts`. For this tutorial, that is `org.example:hide-internal-api:1.0-SNAPSHOT`.
+
+    Open a separate project that has Dokka configured and add your plugin as a dependency:
+
+    ```kotlin build.gradle.kts
+    dependencies {
+        dokkaPlugin("org.example:hide-internal-api:1.0-SNAPSHOT")
+    }
+    ```
+
+    Run `dokkaHtml` with Gradle debug enabled:
+
+    ```bash
+    ./gradlew clean dokkaHtml -Dorg.gradle.debug=true --no-daemon
+    ```
+
+    Switch back to the plugin project, set a breakpoint inside `shouldBeSuppressed`, and start a Remote JVM Debug session in IntelliJ IDEA targeting port 5005.
+
+    When the debugger stops, inspect `d: Documentable`. Navigate through the object's fields until you find the `extra` map. It contains three entries, one of which is `Annotations` — exactly what you need to detect `@Internal`.
+
+    <Note>
+      See the [developer introduction](/developer/introduction#debug-dokka-in-intellij-idea) for more detailed instructions on setting up remote debugging.
+    </Note>
+  </Step>
+  <Step title="Implement the filtering logic">
+    With the data model understood from the debugger, implement `shouldBeSuppressed` to check whether the documentable carries the `@Internal` annotation:
+
+    ```kotlin
+    override fun shouldBeSuppressed(d: Documentable): Boolean {
+        val annotations: List<Annotations.Annotation> =
+            (d as? WithExtraProperties<*>)
+                ?.extra
+                ?.allOfType<Annotations>()
+                ?.flatMap { it.directAnnotations.values.flatten() }
+                ?: emptyList()
+
+        return annotations.any { isInternalAnnotation(it) }
+    }
+
+    private fun isInternalAnnotation(annotation: Annotations.Annotation): Boolean {
+        return annotation.dri.packageName == "org.jetbrains.dokka.internal.test"
+                && annotation.dri.classNames == "Internal"
+    }
+    ```
+
+    The logic casts the documentable to `WithExtraProperties`, retrieves all `Annotations` entries from the `extra` map, flattens the annotation lists, and checks whether any annotation matches the `@Internal` class by package name and class name.
+
+    The complete plugin implementation at this point looks like this:
+
+    ```kotlin
+    package org.example.dokka.plugin
+
+    import org.jetbrains.dokka.base.DokkaBase
+    import org.jetbrains.dokka.base.transformers.documentables.SuppressedByConditionDocumentableFilterTransformer
+    import org.jetbrains.dokka.model.Annotations
+    import org.jetbrains.dokka.model.Documentable
+    import org.jetbrains.dokka.model.properties.WithExtraProperties
+    import org.jetbrains.dokka.plugability.DokkaContext
+    import org.jetbrains.dokka.plugability.DokkaPlugin
+
+    class HideInternalApiPlugin : DokkaPlugin() {
+        val myFilterExtension by extending {
+            plugin<DokkaBase>().preMergeDocumentableTransformer providing ::HideInternalApiTransformer
+        }
+    }
+
+    class HideInternalApiTransformer(context: DokkaContext) :
+        SuppressedByConditionDocumentableFilterTransformer(context) {
+
+        override fun shouldBeSuppressed(d: Documentable): Boolean {
+            val annotations: List<Annotations.Annotation> =
+                (d as? WithExtraProperties<*>)
+                    ?.extra
+                    ?.allOfType<Annotations>()
+                    ?.flatMap { it.directAnnotations.values.flatten() }
+                    ?: emptyList()
+
+            return annotations.any { isInternalAnnotation(it) }
+        }
+
+        private fun isInternalAnnotation(annotation: Annotations.Annotation): Boolean {
+            return annotation.dri.packageName == "org.jetbrains.dokka.internal.test"
+                    && annotation.dri.classNames == "Internal"
+        }
+    }
+    ```
+  </Step>
+  <Step title="Verify manually">
+    Bump the plugin version in `build.gradle.kts`, publish to Maven Local again, and run `dokkaHtml` in the debug project without the `--no-daemon` flag or debug options:
+
+    ```bash
+    ./gradlew publishToMavenLocal
+    # in the debug project:
+    ./gradlew dokkaHtml
+    ```
+
+    Open the generated HTML documentation. You should see `shouldBeVisible` documented normally. `shouldBeExcludedFromDocumentation` should not appear anywhere in the output.
+  </Step>
+  <Step title="Write a unit test">
+    The plugin template includes a pre-made test class. Rename and move it as needed.
+
+    The plugin API ships with test utilities based on `BaseAbstractTest`. These utilities let you provide inline source code as a string, configure Dokka, apply your plugin, and assert on the resulting documentables, pages, or output files without needing a separate project.
+
+    Here is the complete unit test for this plugin:
+
+    ```kotlin
+    package org.example.dokka.plugin
+
+    import org.jetbrains.dokka.base.testApi.testRunner.BaseAbstractTest
+    import kotlin.test.Test
+    import kotlin.test.assertEquals
+
+    class HideInternalApiPluginTest : BaseAbstractTest() {
+
+        @Test
+        fun `should hide annotated functions`() {
+            val configuration = dokkaConfiguration {
+                sourceSets {
+                    sourceSet {
+                        sourceRoots = listOf("src/main/kotlin/basic/Test.kt")
+                    }
+                }
+            }
+            val hideInternalPlugin = HideInternalApiPlugin()
+
+            testInline(
+                """
+                |/src/main/kotlin/basic/Test.kt
+                |package org.jetbrains.dokka.internal.test
+                |
+                |annotation class Internal
+                |
+                |fun shouldBeVisible() {}
+                |
+                |@Internal
+                |fun shouldBeExcludedFromDocumentation() {}
+            """.trimMargin(),
+                configuration = configuration,
+                pluginOverrides = listOf(hideInternalPlugin)
+            ) {
+                preMergeDocumentablesTransformationStage = { modules ->
+                    val testModule = modules.single { it.name == "root" }
+                    val testPackage = testModule.packages.single {
+                        it.name == "org.jetbrains.dokka.internal.test"
+                    }
+
+                    val packageFunctions = testPackage.functions
+                    assertEquals(1, packageFunctions.size)
+                    assertEquals("shouldBeVisible", packageFunctions[0].name)
+                }
+            }
+        }
+    }
+    ```
+
+    Key points about this test:
+
+    1. Your test class must extend `BaseAbstractTest`, which provides the core test utilities.
+    2. Use the `dokkaConfiguration` DSL to configure source sets, enable settings, or adjust any Dokka option.
+    3. `testInline` is the main entry point for unit tests. It accepts inline Kotlin source as a multi-line string.
+    4. Pass plugins to the test via `pluginOverrides`. This runs the test with your plugin applied.
+    5. You can assert at different pipeline stages: `preMergeDocumentablesTransformationStage` matches the `PreMergeDocumentableTransformer` stage this plugin targets.
+    6. Make sure the package name in the inline source (`org.jetbrains.dokka.internal.test`) matches the package name hardcoded in `isInternalAnnotation`. Mismatches will cause the test to fail.
+
+    <Warning>
+      The `testInline` source string uses a pipe (`|`) prefix convention with `.trimMargin()`. The virtual file path is declared on the first line starting with `/`, followed by the package declaration on the next line. Make sure to follow this format exactly.
+    </Warning>
+  </Step>
+</Steps>
+
+## What you built
+
+You created a Dokka plugin that:
+
+- Extends `DokkaPlugin` and registers a `PreMergeDocumentableTransformer` extension
+- Implements `SuppressedByConditionDocumentableFilterTransformer` to filter by annotation
+- Is registered via the `META-INF/services` ServiceLoader mechanism
+- Includes a unit test using Dokka's built-in test utilities
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Plugin development overview" icon="puzzle-piece" href="/developer/plugin-development">
+    Review extension points, project setup options, and plugin registration in detail.
+  </Card>
+  <Card title="Extension points reference" icon="plug" href="/developer/extension-points">
+    Explore all available core and base extension points to find the right hook for your use case.
+  </Card>
+  <Card title="Architecture overview" icon="sitemap" href="/developer/architecture-overview">
+    Understand the data model stages — documentables, pages, and output — to write more precise assertions.
+  </Card>
+  <Card title="Community plugins" icon="shapes" href="https://kotlinlang.org/docs/dokka-plugins.html#notable-plugins">
+    See how other plugins use the extension system for inspiration and reference.
+  </Card>
+</CardGroup>

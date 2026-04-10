@@ -1,0 +1,553 @@
+---
+title: "Migrate from Dokka Gradle plugin v1 to v2"
+description: "Step-by-step guide to upgrading from DGP v1 to v2, covering the new top-level DSL, renamed tasks, multi-project aggregation, and configuration cache support."
+keywords: ["dokka", "migration", "dgp v2", "gradle plugin", "upgrade", "v1 to v2"]
+---
+
+The Dokka Gradle plugin v2 (DGP v2) is enabled by default starting with Dokka 2.1.0. If you are already on Dokka 2.1.0 or later, you can skip this page and go directly to the [Gradle runner documentation](/runners/gradle). If you are still using DGP v1, this guide covers everything you need to update in your build scripts to complete the migration.
+
+DGP v2 aligns with Gradle best practices and brings several improvements over v1:
+
+- A top-level `dokka {}` DSL replaces low-level task-based configuration, making build scripts shorter and more readable.
+- Full support for Gradle [configuration cache](https://docs.gradle.org/current/userguide/configuration_cache.html) and [build cache](https://docs.gradle.org/current/userguide/build_cache.html).
+- Type-safe plugin configuration instead of JSON strings.
+- A declarative aggregation model for multi-project documentation.
+- Gradle types used throughout, which improves performance and incremental build tracking.
+
+## Before you start
+
+### Verify supported versions
+
+Before migrating, ensure your project meets the minimum version requirements:
+
+| Tool | Minimum version |
+|------|----------------|
+| [Gradle](https://docs.gradle.org/current/userguide/upgrading_version_8.html) | 7.6 |
+| [Android Gradle Plugin](https://developer.android.com/build/agp-upgrade-assistant) | 7.0 |
+| [Kotlin Gradle Plugin](https://kotlinlang.org/docs/gradle-configure-project.html) | 1.9 |
+
+### Enable DGP v2
+
+Update the Dokka version in the `plugins {}` block of your `build.gradle.kts`:
+
+```kotlin build.gradle.kts
+plugins {
+    kotlin("jvm") version "2.1.10"
+    id("org.jetbrains.dokka") version "2.2.0"
+}
+```
+
+### Enable migration helpers
+
+Add the following property to your project's `gradle.properties` file. This activates DGP v2 with migration helpers that prevent build script compilation errors while your v1 task references are still in place:
+
+```text gradle.properties
+org.jetbrains.dokka.experimental.gradle.pluginMode=V2EnabledWithHelpers
+```
+
+<Tip>
+  If your project doesn't have a `gradle.properties` file, create one in the root directory of your project.
+</Tip>
+
+<Note>
+  Migration helpers do not actively assist with the migration. They only keep your build script from breaking while you transition to the new API. Remove them once you have completed the migration.
+</Note>
+
+### Sync with Gradle
+
+After enabling DGP v2 and migration helpers, sync your project:
+
+- **IntelliJ IDEA**: Click **Reload All Gradle Projects** in the Gradle tool window.
+- **Android Studio**: Select **File** | **Sync Project with Gradle Files**.
+
+---
+
+## Migrate your project
+
+Work through each section below that applies to your project.
+
+### Update top-level configuration
+
+DGP v2 introduces a top-level `dokka {}` DSL block that replaces the previous approach of configuring tasks with `tasks.withType<DokkaTask>()`.
+
+<CodeGroup>
+
+```kotlin DGP v1
+// build.gradle.kts
+
+import org.jetbrains.dokka.gradle.DokkaTask
+
+tasks.withType<DokkaTask>().configureEach {
+    suppressInheritedMembers.set(true)
+    failOnWarning.set(true)
+    dokkaSourceSets {
+        named("main") {
+            moduleName.set("Project Name")
+            includes.from("README.md")
+            sourceLink {
+                localDirectory.set(file("src/main/kotlin"))
+                remoteUrl.set(URL("https://example.com/src"))
+                remoteLineSuffix.set("#L")
+            }
+        }
+    }
+}
+
+tasks.dokkaHtml {
+    pluginConfiguration<DokkaBase, DokkaBaseConfiguration> {
+        customStyleSheets.set(listOf("styles.css"))
+        customAssets.set(listOf("logo.png"))
+        footerMessage.set("(c) Your Company")
+    }
+}
+```
+
+```kotlin DGP v2
+// build.gradle.kts
+
+dokka {
+    moduleName.set("Project Name")
+    dokkaPublications.html {
+        suppressInheritedMembers.set(true)
+        failOnWarning.set(true)
+    }
+    dokkaSourceSets.main {
+        includes.from("README.md")
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl("https://example.com/src")
+            remoteLineSuffix.set("#L")
+        }
+    }
+    pluginsConfiguration.html {
+        customStyleSheets.from("styles.css")
+        customAssets.from("logo.png")
+        footerMessage.set("(c) Your Company")
+    }
+}
+```
+
+</CodeGroup>
+
+### Update visibility settings
+
+The `documentedVisibilities` property now uses `VisibilityModifier` from a new import path instead of `Visibility`.
+
+<CodeGroup>
+
+```kotlin DGP v1
+import org.jetbrains.dokka.DokkaConfiguration.Visibility
+
+// ...
+documentedVisibilities.set(
+    setOf(Visibility.PUBLIC)
+)
+```
+
+```kotlin DGP v2
+import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
+
+// ...
+documentedVisibilities.set(
+    setOf(VisibilityModifier.Public)
+)
+
+// or using the utility function
+documentedVisibilities(VisibilityModifier.Public)
+```
+
+</CodeGroup>
+
+### Update source links
+
+Source link configuration moves inside the `dokka {}` block. Additionally, the `remoteUrl` property now accepts a `URI` instead of a `URL`, matching Gradle's deprecation of `URL` decoding.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.withType<DokkaTask>().configureEach {
+    dokkaSourceSets {
+        named("main") {
+            sourceLink {
+                localDirectory.set(file("src/main/kotlin"))
+                remoteUrl.set(URL("https://github.com/your-repo"))
+                remoteLineSuffix.set("#L")
+            }
+        }
+    }
+}
+```
+
+```kotlin DGP v2
+// build.gradle.kts
+
+dokka {
+    dokkaSourceSets.main {
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl("https://github.com/your-repo")
+            remoteLineSuffix.set("#L")
+        }
+    }
+}
+```
+
+</CodeGroup>
+
+<Note>
+  The `remoteUrl("https://...")` helper method is a convenience function that wraps the `URI` constructor. You can also set the value explicitly with `remoteUrl.set(URI("https://..."))`.
+</Note>
+
+### Update external documentation links
+
+External documentation links now use `register()` to follow Gradle DSL conventions. The `url` and `packageListUrl` properties accept strings directly via helper methods.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.dokkaHtml {
+    dokkaSourceSets {
+        configureEach {
+            externalDocumentationLink {
+                url = URL("https://example.com/docs/")
+                packageListUrl = File("/path/to/package-list").toURI().toURL()
+            }
+        }
+    }
+}
+```
+
+```kotlin DGP v2
+dokka {
+    dokkaSourceSets.configureEach {
+        externalDocumentationLinks.register("example-docs") {
+            url("https://example.com/docs/")
+            packageListUrl("https://example.com/docs/package-list")
+        }
+    }
+}
+```
+
+</CodeGroup>
+
+### Update custom assets
+
+Custom assets now use `FileCollection` via `.from()` instead of `var List<File>`.
+
+<CodeGroup>
+
+```kotlin DGP v1
+customAssets = listOf(file("example.png"), file("example2.png"))
+```
+
+```kotlin DGP v2
+customAssets.from("example.png", "example2.png")
+```
+
+</CodeGroup>
+
+### Update output directory
+
+The output directory is now configured inside the `dokkaPublications` block rather than directly on the task.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.dokkaHtml {
+    outputDirectory.set(layout.buildDirectory.dir("dokkaDir"))
+}
+```
+
+```kotlin DGP v2
+dokka {
+    dokkaPublications.html {
+        outputDirectory.set(layout.buildDirectory.dir("dokkaDir"))
+    }
+}
+```
+
+</CodeGroup>
+
+For multi-module projects, set the output directory and include additional files in the root project's `build.gradle.kts`. DGP v2 unifies single-module and multi-module configuration — there is no longer a separate `dokkaHtmlMultiModule` task to configure.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.dokkaHtmlMultiModule {
+    outputDirectory.set(rootDir.resolve("docs/api/0.x"))
+    includes.from(project.layout.projectDirectory.file("README.md"))
+}
+```
+
+```kotlin DGP v2
+// build.gradle.kts (root project)
+
+dokka {
+    dokkaPublications.html {
+        outputDirectory.set(rootDir.resolve("docs/api/0.x"))
+        includes.from(project.layout.projectDirectory.file("README.md"))
+    }
+}
+```
+
+</CodeGroup>
+
+### Update plugin configuration
+
+JSON-based plugin configuration is deprecated. DGP v2 uses a type-safe `pluginsConfiguration {}` DSL instead. This change improves compatibility with Gradle's incremental build system.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.dokkaHtmlMultiModule {
+    pluginsMapConfiguration.set(
+        mapOf(
+            "org.jetbrains.dokka.versioning.VersioningPlugin" to """
+                { "version": "1.2", "olderVersionsDir": "$projectDir/dokka-docs" }
+                """.trimIndent()
+        )
+    )
+}
+```
+
+```kotlin DGP v2
+dokka {
+    pluginsConfiguration {
+        versioning {
+            version.set("1.2")
+            olderVersionsDir.set(projectDir.resolve("dokka-docs"))
+        }
+    }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Update multi-project configuration
+
+### Share configuration across subprojects
+
+DGP v2 moves away from using `subprojects {}` or `allprojects {}` to share configuration. In future Gradle versions, these approaches will cause errors due to [isolated projects](https://docs.gradle.org/current/userguide/isolated_projects.html) enforcement.
+
+The recommended approach is a convention plugin in `buildSrc`.
+
+<Steps>
+  <Step title="Set up the buildSrc directory">
+    Create a `buildSrc/` directory in your project root containing two files:
+
+    ```text
+    buildSrc/
+    ├── settings.gradle.kts
+    └── build.gradle.kts
+    ```
+
+    In `buildSrc/settings.gradle.kts`:
+
+    ```kotlin buildSrc/settings.gradle.kts
+    rootProject.name = "buildSrc"
+    ```
+
+    In `buildSrc/build.gradle.kts`:
+
+    ```kotlin buildSrc/build.gradle.kts
+    plugins {
+        `kotlin-dsl`
+    }
+
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+
+    dependencies {
+        implementation("org.jetbrains.dokka:dokka-gradle-plugin:2.2.0")
+    }
+    ```
+  </Step>
+  <Step title="Create the Dokka convention plugin">
+    Create `buildSrc/src/main/kotlin/dokka-convention.gradle.kts`:
+
+    ```kotlin buildSrc/src/main/kotlin/dokka-convention.gradle.kts
+    plugins {
+        id("org.jetbrains.dokka")
+    }
+
+    dokka {
+        // Shared configuration for all subprojects goes here
+    }
+    ```
+
+    You do not need to specify a Dokka version here — it is inherited from `buildSrc/build.gradle.kts`.
+  </Step>
+  <Step title="Apply the convention plugin to each subproject">
+    Add the convention plugin to each subproject's `build.gradle.kts`:
+
+    ```kotlin build.gradle.kts
+    plugins {
+        id("dokka-convention")
+    }
+    ```
+  </Step>
+</Steps>
+
+### Update documentation aggregation
+
+DGP v2 replaces implicit multi-module aggregation (via the `dokkaHtmlMultiModule` task) with an explicit `dependencies {}` declaration. Aggregation can now be defined in any `build.gradle.kts` file; to replicate v1 behavior, add it to the root project's build file.
+
+<CodeGroup>
+
+```kotlin DGP v1
+tasks.dokkaHtmlMultiModule {
+    // configuration here implicitly aggregated subprojects
+}
+```
+
+```kotlin DGP v2
+// build.gradle.kts (root project or aggregating project)
+
+dependencies {
+    dokka(project(":some-subproject:"))
+    dokka(project(":another-subproject:"))
+}
+```
+
+</CodeGroup>
+
+### Understand the changed aggregation directory structure
+
+DGP v2 preserves the full subproject path in the aggregated output directory to prevent naming conflicts.
+
+| Version | Example output path |
+|---------|-------------------|
+| DGP v1 | `turbo-lib/build/dokka/html/maths/` |
+| DGP v2 | `turbo-lib/build/dokka/html/turbo-lib/maths/` |
+
+If your project depends on the v1 directory structure (for example, because external links point to the old paths), you can revert the behavior per subproject:
+
+```kotlin build.gradle.kts
+// /turbo-lib/maths/build.gradle.kts
+
+plugins {
+    id("org.jetbrains.dokka")
+}
+
+dokka {
+    // Overrides the subproject directory to match the v1 structure
+    modulePath.set("maths")
+}
+```
+
+<Warning>
+  Changing the aggregation directory structure affects all external links to the generated documentation. Update any bookmarks or inbound links after migration.
+</Warning>
+
+---
+
+## Update the generate task
+
+The task used to trigger documentation generation has been renamed.
+
+<CodeGroup>
+
+```bash DGP v1
+./gradlew dokkaHtml
+
+# or for multi-module
+
+./gradlew dokkaHtmlMultiModule
+```
+
+```bash DGP v2
+./gradlew :dokkaGenerate
+```
+
+</CodeGroup>
+
+The single `dokkaGenerate` task works for both single-module and multi-module projects. It generates documentation in all formats based on the applied plugins.
+
+---
+
+## Select an output format
+
+<Warning>
+  The Javadoc output format is in Alpha. You may encounter bugs and migration issues. Successful integration with tools that accept Javadoc as input is not guaranteed.
+</Warning>
+
+DGP v2 supports HTML and Javadoc output. Apply the corresponding plugin `id` and run the matching task:
+
+```kotlin build.gradle.kts
+plugins {
+    // Generates HTML documentation
+    id("org.jetbrains.dokka") version "2.2.0"
+
+    // Generates Javadoc documentation (Alpha)
+    id("org.jetbrains.dokka-javadoc") version "2.2.0"
+
+    // Applying both plugin IDs generates both formats
+}
+```
+
+| Format | Plugin ID | Gradle task |
+|--------|-----------|-------------|
+| HTML | `id("org.jetbrains.dokka")` | `./gradlew :dokkaGeneratePublicationHtml` |
+| Javadoc | `id("org.jetbrains.dokka-javadoc")` | `./gradlew :dokkaGeneratePublicationJavadoc` |
+| Both | Both plugin IDs applied | `./gradlew :dokkaGenerate` |
+
+<Note>
+  DGP v2 no longer supports the experimental Markdown (GFM) and Jekyll output formats. If your project relied on these formats, you will need an alternative approach.
+</Note>
+
+---
+
+## Address removals and deprecations
+
+- **Markdown and Jekyll formats**: No longer supported in DGP v2. Only HTML and Javadoc are available.
+- **`DokkaCollectorTask`**: Removed. Generate documentation separately per subproject and use the `dependencies {}` aggregation model instead.
+- **`subprojects {}` / `allprojects {}` for Dokka config**: Avoid these. Use convention plugins instead.
+- **JSON-based plugin configuration**: Deprecated in favor of the type-safe `pluginsConfiguration {}` DSL.
+
+---
+
+## Finalize the migration
+
+### Set the opt-in flag
+
+After completing the migration, replace the helpers flag in `gradle.properties` with the clean v2 flag:
+
+```text gradle.properties
+org.jetbrains.dokka.experimental.gradle.pluginMode=V2Enabled
+```
+
+If you have removed all references to v1 Gradle tasks from your build scripts, you should not see any compilation errors at this point.
+
+### Enable build cache and configuration cache
+
+DGP v2 fully supports Gradle's build cache and configuration cache for improved performance. Enable them in your `gradle.properties`:
+
+```text gradle.properties
+org.gradle.caching=true
+org.gradle.configuration-cache=true
+```
+
+See the [Gradle build cache documentation](https://docs.gradle.org/current/userguide/build_cache.html#sec:build_cache_enable) and [configuration cache documentation](https://docs.gradle.org/current/userguide/configuration_cache.html#config_cache:usage:enable) for full details.
+
+---
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Gradle runner" icon="box" href="/runners/gradle">
+    Explore the complete Gradle plugin configuration reference for DGP v2.
+  </Card>
+  <Card title="DGP v2 examples" icon="code" href="https://github.com/Kotlin/dokka/tree/master/examples/gradle-v2">
+    Browse example projects demonstrating DGP v2 configuration patterns.
+  </Card>
+  <Card title="Plugins" icon="puzzle-piece" href="/configuration/plugins">
+    Learn about Dokka plugins and how to configure them with the new type-safe DSL.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    New to Dokka? Start here for a quick setup guide.
+  </Card>
+</CardGroup>

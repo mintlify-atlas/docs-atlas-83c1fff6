@@ -1,122 +1,88 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dokka",
+  "theme": "luma",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#a934e7",
+    "light": "#d484db",
+    "dark": "#ffffff"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/20814f07-442c-4f8d-8dcd-03c4951b0f5c.png",
+  "logo": {
+    "light": "https://media.brand.dev/e19df548-6808-4a31-a5db-5961ea87ff34.svg",
+    "dark": "https://media.brand.dev/e19df548-6808-4a31-a5db-5961ea87ff34.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/Kotlin/dokka"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Kotlin/dokka"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "migration"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Runners",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "runners/gradle",
+              "runners/maven",
+              "runners/cli"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Output Formats",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "formats/html",
+              "formats/javadoc",
+              "formats/markdown"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Configuration",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "configuration/gradle-options",
+              "configuration/module-and-package-docs",
+              "configuration/plugins"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Developer Guide",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Plugin Development",
             "pages": [
-              "api-reference/introduction"
+              "developer/introduction",
+              "developer/plugin-development",
+              "developer/sample-plugin-tutorial"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Architecture",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "developer/architecture-overview",
+              "developer/data-model",
+              "developer/extension-points"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

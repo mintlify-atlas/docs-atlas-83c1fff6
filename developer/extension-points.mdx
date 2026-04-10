@@ -1,0 +1,174 @@
+---
+title: "Dokka extension points: declare, register, and query"
+description: "Learn how Dokka's extension point system works. Declare new extension points, register implementations, control ordering, and query extensions at runtime."
+---
+
+Dokka's extensibility is built on a formal extension point system. An extension point is a typed contract — an interface or abstract class — that other plugins can provide implementations for. When Dokka runs, it discovers all registered extensions and invokes them at the appropriate pipeline stage.
+
+Understanding extension points is essential for plugin development: they are the primary mechanism for customizing how Dokka processes source code, transforms the data model, and renders output.
+
+## Declaring extension points
+
+To create a new extension point in your plugin, use the `extensionPoint` delegate inside a class that extends `DokkaPlugin`:
+
+```kotlin
+class MyPlugin : DokkaPlugin() {
+    val sampleExtensionPoint by extensionPoint<SampleExtensionPointInterface>()
+}
+
+interface SampleExtensionPointInterface {
+    fun doSomething(input: Input): List<Output>
+}
+```
+
+You can then provide a default implementation within the same plugin:
+
+```kotlin
+open class MyPlugin : DokkaPlugin() {
+    val sampleExtensionPoint by extensionPoint<SampleExtensionPointInterface>()
+
+    val defaultSampleExtension by extending {
+        sampleExtensionPoint with DefaultSampleExtension()
+    }
+}
+
+class DefaultSampleExtension : SampleExtensionPointInterface {
+    override fun doSomething(input: Input): List<Output> = listOf()
+}
+```
+
+## Registering extensions
+
+To provide an implementation for an extension point declared in another plugin, use the `extending` block with the plugin querying API:
+
+```kotlin
+class MyExtendedPlugin : DokkaPlugin() {
+    val mySampleExtensionImplementation by extending {
+        plugin<MyPlugin>().sampleExtensionPoint with SampleExtensionImpl()
+    }
+}
+
+class SampleExtensionImpl : SampleExtensionPointInterface {
+    override fun doSomething(input: Input): List<Output> = listOf()
+}
+```
+
+### Providing with context
+
+If your extension needs access to `DokkaContext` (e.g., to query other extensions or read configuration), use the `providing` keyword:
+
+```kotlin
+val defaultSampleExtension by extending {
+    sampleExtensionPoint providing { context ->
+        // use context to query other extensions or get configuration
+        DefaultSampleExtension()
+    }
+}
+```
+
+### Overriding an existing extension
+
+By default, `extending` registers an additional extension. Some extension points expect only one implementation — use `override` to replace an existing registration:
+
+```kotlin
+class MyExtendedPlugin : DokkaPlugin() {
+    private val myPlugin by lazy { plugin<MyPlugin>() }
+
+    val mySampleExtensionImplementation by extending {
+        (myPlugin.sampleExtensionPoint
+                with SampleExtensionImpl()
+                override myPlugin.defaultSampleExtension)
+    }
+}
+```
+
+This is also useful for disabling or replacing extensions from `DokkaBase`.
+
+### Controlling order
+
+When multiple extensions are registered for the same extension point, you can control the invocation order:
+
+```kotlin
+class MyExtendedPlugin : DokkaPlugin() {
+    private val myPlugin by lazy { plugin<MyPlugin>() }
+
+    val mySampleExtensionImplementation by extending {
+        myPlugin.sampleExtensionPoint with SampleExtensionImpl() order {
+            before(myPlugin.firstExtension)
+            after(myPlugin.thirdExtension)
+        }
+    }
+}
+```
+
+### Conditional registration
+
+Register an extension only when a condition is true using `applyIf`:
+
+```kotlin
+class MyExtendedPlugin : DokkaPlugin() {
+    private val myPlugin by lazy { plugin<MyPlugin>() }
+
+    val mySampleExtensionImplementation by extending {
+        myPlugin.sampleExtensionPoint with SampleExtensionImpl() applyIf {
+            // return true to register, false to skip
+            condition()
+        }
+    }
+}
+```
+
+## Querying extensions at runtime
+
+After extensions are registered, query them from `DokkaContext` using `query` (all extensions) or `querySingle` (exactly one):
+
+```kotlin
+class MyExtension(context: DokkaContext) {
+    // All registered extensions for the extension point
+    val allSampleExtensions = context.plugin<MyPlugin>().query { sampleExtensionPoint }
+
+    // Throws if more than one extension is registered
+    val singleExtension = context.plugin<MyPlugin>().querySingle { sampleExtensionPoint }
+
+    fun invoke() {
+        allSampleExtensions.forEach { it.doSomething(Input()) }
+        singleExtension.doSomething(Input())
+    }
+}
+```
+
+Use `querySingle` when you expect exactly one implementation (and want an error if multiple plugins accidentally register the same point). Use `query` for extension points that support multiple implementations — like `DocumentableTransformer`.
+
+## Built-in extension points
+
+Dokka provides two layers of extension points:
+
+<AccordionGroup>
+  <Accordion title="Core extension points (dokka-core)">
+    Core extension points define Dokka's fundamental pipeline stages. They are the lowest-level hooks, used when building runners or implementing full generation strategies.
+
+    Key core extension points include:
+    - `Generation` — controls the overall documentation generation process
+    - `DocumentableToPageTranslator` — converts the Documentable model to the Page model
+    - `PageTransformer` — transforms pages before rendering
+    - `Renderer` — renders pages to output files
+
+    Most plugin authors work with the base plugin extension points instead.
+  </Accordion>
+  <Accordion title="Base plugin extension points (DokkaBase)">
+    `DokkaBase` (the `plugin-base` artifact) builds on core extension points and provides higher-level hooks for common customization tasks:
+
+    - `DocumentableTransformer` — transform Documentables (e.g., filter out annotated members)
+    - `DocumentableMerger` — merge Documentables from multiple source sets
+    - `PageCreator` — create custom page types
+    - `LocationProvider` — control how page paths are generated
+    - `OutputWriter` — write output files to disk
+    - `HtmlCustomizer` — add custom HTML to generated pages (e.g., scripts, styles)
+
+    See the [Architecture overview](/developer/architecture-overview) and [Data model](/developer/data-model) pages for how these fit into the pipeline.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+If no existing extension point fits your use case, share it with the maintainers on [Kotlin Slack](https://kotl.in/slack) in the `#dokka` channel — it may be added in a future Dokka version.
+</Tip>

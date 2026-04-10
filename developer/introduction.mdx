@@ -1,0 +1,128 @@
+---
+title: "Dokka developer guide: build, test, and contribute"
+description: "Get oriented with Dokka's internals, learn how to build and debug Dokka locally, and find everything you need to start contributing or writing plugins."
+keywords: ["dokka", "developer guide", "contributing", "build", "debug", "workflow", "plugin development"]
+---
+
+The developer documentation is aimed at anyone who wants to go deeper with Dokka — whether that means writing a plugin, fixing a bug, or contributing a new feature. This guide explains how the project is structured, how to build and test Dokka locally, and where to go next depending on your goal.
+
+## Before you start
+
+If you want to start immediately, the most important thing to read is the local workflow section below. It covers building, testing, and debugging Dokka locally with Gradle.
+
+For contributing to Dokka itself, read [CONTRIBUTING.md](https://github.com/Kotlin/dokka/blob/master/CONTRIBUTING.md) on GitHub before opening a pull request. It contains information about code style, PR conventions, and the review process.
+
+## Local development workflow
+
+Dokka is built with Gradle. The steps below apply to developing Dokka itself and to developing Dokka plugins.
+
+### Build Dokka
+
+Building Dokka compiles all subprojects and runs checks:
+
+```bash
+./gradlew build
+```
+
+Checks run as part of `build` do not require special environment configuration and typically take 2–5 minutes. Make sure they pass before submitting a pull request.
+
+<Note>
+  If you see `API check failed for project ..` during the build, the [binary compatibility validator](https://github.com/Kotlin/binary-compatibility-validator) has detected a public API change. If the change is intentional, run `./gradlew apiDump` to regenerate the `.api` files, then commit them along with your other changes.
+</Note>
+
+### Test your changes locally
+
+After building, publish Dokka to your local Maven repository so you can use it in another project:
+
+<Steps>
+  <Step title="Publish to Maven Local">
+    Publish a custom version of Dokka to `mavenLocal()`. The version string will be propagated to bundled plugins:
+
+    ```bash
+    ./gradlew publishToMavenLocal -Pversion=2.2.0-my-fix-SNAPSHOT
+    ```
+  </Step>
+  <Step title="Add Maven Local as a repository">
+    In the project where you want to test your changes, add `mavenLocal()` as a repository:
+
+    ```kotlin build.gradle.kts
+    repositories {
+        mavenLocal()
+    }
+    ```
+  </Step>
+  <Step title="Update the Dokka version">
+    Point your project to the version you just published:
+
+    ```kotlin build.gradle.kts
+    plugins {
+        id("org.jetbrains.dokka") version "2.2.0-my-fix-SNAPSHOT"
+    }
+    ```
+  </Step>
+</Steps>
+
+### Debug Dokka in IntelliJ IDEA
+
+Dokka runs as a Gradle plugin, so debugging works the same way as any other Gradle plugin.
+
+<Steps>
+  <Step title="Choose a debug project">
+    Pick a small project that reproduces the behavior you want to observe. You can use the examples in [dokka/examples/gradle](https://github.com/Kotlin/dokka/tree/master/examples/gradle), which include single-module, multi-module, and multiplatform configurations.
+  </Step>
+  <Step title="Enable Gradle debug mode">
+    Run the desired Dokka task with debug enabled and `--no-daemon`:
+
+    ```bash
+    ./gradlew dokkaHtml -Dorg.gradle.debug=true --no-daemon
+    ```
+
+    Gradle will pause and wait for you to attach a debugger before proceeding.
+  </Step>
+  <Step title="Attach the debugger">
+    Open Dokka in IntelliJ IDEA, set a breakpoint, then attach to the remote JVM process running on port 5005. Use **Run → Attach to Process**, or create a **Remote JVM Debug** run configuration.
+  </Step>
+</Steps>
+
+<Warning>
+  Always pass `--no-daemon` when debugging. Gradle daemons persist after a task completes, which can cause the debugger to hang or the port to remain in use. If you encounter port conflicts, kill any running daemons with `pkill -f gradle.*daemon`.
+</Warning>
+
+### Run integration tests
+
+Integration tests verify compatibility across different versions of Kotlin, Android, Gradle, and Java. They apply Dokka to real projects and invoke tasks to generate documentation end-to-end.
+
+Integration tests require significant RAM (20–30 GB) and take over an hour to complete. They are run automatically on CI when you submit a pull request, so you do not need to run all of them locally during everyday development.
+
+To skip integration tests during a local build:
+
+```bash
+./gradlew check -Porg.jetbrains.dokka.integration_test.skip=true
+```
+
+To run integration tests explicitly:
+
+```bash
+./gradlew :dokka-integration-tests:check
+```
+
+## What to explore next
+
+<CardGroup cols={2}>
+  <Card title="Plugin development" icon="puzzle-piece" href="/developer/plugin-development">
+    Learn how to create a Dokka plugin: set up the project, extend `DokkaPlugin`, and register extension points.
+  </Card>
+  <Card title="Sample plugin tutorial" icon="graduation-cap" href="/developer/sample-plugin-tutorial">
+    Follow a step-by-step tutorial that builds a plugin to hide members annotated with `@Internal`.
+  </Card>
+  <Card title="Architecture overview" icon="sitemap" href="/developer/architecture-overview">
+    Understand Dokka's internal data model, pipeline stages, and extension point system.
+  </Card>
+  <Card title="Extension points" icon="plug" href="/developer/extension-points">
+    Browse the core and base extension points you can implement in your own plugin.
+  </Card>
+</CardGroup>
+
+## Community
+
+If you have questions while developing, the Dokka maintainers are reachable in the [#dokka channel on Kotlin Slack](https://kotlinlang.slack.com) and through [GitHub Issues](https://github.com/Kotlin/dokka/issues). For general contribution questions, check [CONTRIBUTING.md](https://github.com/Kotlin/dokka/blob/master/CONTRIBUTING.md) first.

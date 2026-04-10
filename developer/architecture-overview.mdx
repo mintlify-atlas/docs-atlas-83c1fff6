@@ -1,0 +1,116 @@
+---
+title: "How Dokka transforms source code into docs"
+description: "A walkthrough of Dokka's four-stage pipeline — Input, Documentables, Pages, Output — and how extension points let you modify each stage independently."
+---
+
+Dokka doesn't translate source files directly into HTML. Instead, it passes your code through a series of independent, format-agnostic stages, each producing a model that the next stage consumes. This layered design means you can modify behaviour at exactly the right level — filtering declarations, restructuring pages, or adding a new output format — without touching any other part of the system.
+
+## The four-stage pipeline
+
+Every documentation run moves data through four successive stages:
+
+```
+Input → Documentables → Pages → Output
+```
+
+<Steps>
+  <Step title="Input">
+    Raw source files — `.kt`, `.java`, or anything else a custom translator can parse. Dokka reads source sets and configuration at this stage but does not yet interpret meaning from them.
+  </Step>
+
+  <Step title="Documentables">
+    A unified, language-independent tree that represents every declaration in your sources. Classes, functions, packages, properties, and type parameters all become `Documentable` nodes. Two Kotlin source sets and a Java source set describing the same API are merged into a single coherent tree at this stage.
+  </Step>
+
+  <Step title="Pages">
+    A tree of `PageNode` objects that describes the documentation pages to be generated, along with the `ContentNode` building blocks on each page — text, headings, tables, code blocks, and so on. The page model is output-format independent; the same page tree can be rendered as HTML, Markdown, or Javadoc.
+  </Step>
+
+  <Step title="Output">
+    A `Renderer` maps each `PageNode` to a file and each `ContentNode` to its format-specific representation. For example, `ContentCodeBlock` becomes `<code>…</code>` in HTML and triple-backtick fences in Markdown.
+  </Step>
+</Steps>
+
+## Why the pipeline is layered this way
+
+A simpler design might walk the source tree once and emit HTML directly. That approach works until requirements grow: multi-platform projects need source sets merged, Markdown output needs different rendering logic, custom KDoc tags need dedicated handling, and third-party plugins need a way to inject behaviour without forking Dokka itself.
+
+Separating the model into discrete layers means each concern lives at exactly one level:
+
+<CardGroup cols={2}>
+  <Card title="Filter a declaration" icon="filter">
+    Operate on the Documentables layer. Remove a `Documentable` before merging and it disappears from every output format automatically.
+  </Card>
+  <Card title="Change page structure" icon="layout-panel-top">
+    Operate on the Pages layer. Merge several overload pages into one without touching the documentable model or the renderer.
+  </Card>
+  <Card title="Add an output format" icon="file-code">
+    Implement `Renderer`. The existing pipeline produces the page tree; you only need to decide how to write it to disk.
+  </Card>
+  <Card title="Support a new language" icon="code">
+    Implement `SourceToDocumentableTranslator`. As long as you produce the standard `Documentable` tree, all downstream stages work unchanged.
+  </Card>
+</CardGroup>
+
+## Extension points
+
+An _extension point_ is a typed, pluggable interface that sits at one of the pipeline stages. An _extension_ is a registered implementation of that interface. Dokka discovers extensions at startup and invokes them in order.
+
+The snippet below shows the complete DSL for declaring an extension point, providing a default implementation, and overriding an implementation from another plugin:
+
+```kotlin
+// Declare your own plugin
+class MyPlugin : DokkaPlugin() {
+    // Create an extension point for developers to use
+    val signatureProvider by extensionPoint<SignatureProvider>()
+
+    // Provide a default implementation
+    val defaultSignatureProvider by extending {
+        signatureProvider with KotlinSignatureProvider()
+    }
+
+    // Override an extension from DokkaBase
+    val dokkaBasePlugin by lazy { plugin<DokkaBase>() }
+    val multimoduleLocationProvider by extending {
+        (dokkaBasePlugin.locationProviderFactory
+                providing MultimoduleLocationProvider::Factory
+                override dokkaBasePlugin.locationProvider)
+    }
+}
+
+interface SignatureProvider {
+    fun signature(documentable: Documentable): List<ContentNode>
+}
+
+class KotlinSignatureProvider : SignatureProvider {
+    override fun signature(documentable: Documentable): List<ContentNode> = listOf()
+}
+```
+
+<Note>
+  Extension points can have multiple registered extensions (all are invoked, in order) or a single one (enforced by using `override`). Which behaviour applies depends on the specific extension point.
+</Note>
+
+## The three areas developers interact with most
+
+<AccordionGroup>
+  <Accordion title="Documentables model">
+    The Documentables model is the in-memory representation of everything in your source code. It is the right place to add, remove, or annotate declarations — for example, hiding `@Internal`-annotated members or injecting synthetic entries. See [Data model](/developer/data-model) for a full reference.
+  </Accordion>
+
+  <Accordion title="Pages and content model">
+    The Pages model controls what documentation pages exist and what content appears on them. Modify it to merge overloaded function pages, inject custom HTML fragments, or restructure how a class's members are grouped. The Content model beneath it describes each visual element. See [Data model](/developer/data-model) for details.
+  </Accordion>
+
+  <Accordion title="Extension points and plugins">
+    Extension points are the mechanism through which all of the above is customised. Every stage of the pipeline exposes one or more extension points. Your plugin implements the relevant interfaces and registers them; Dokka discovers and invokes them at the right moment. See [Extension points](/developer/extension-points) for a full reference.
+  </Accordion>
+</AccordionGroup>
+
+## Historical context
+
+This architecture is the second iteration of Dokka, redesigned from scratch to support the extensibility requirements described above. For background on the design decisions, see the talk [New Dokka – Designed for Fearless Creativity](https://www.youtube.com/watch?v=OvFoTRhqaKg) by Paweł Marks.
+
+<Tip>
+  Some details in that talk may be outdated relative to the current codebase, so verify specifics against the source code or these docs.
+</Tip>

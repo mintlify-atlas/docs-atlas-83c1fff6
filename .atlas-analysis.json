@@ -1,0 +1,103 @@
+{
+  "projectType": "framework",
+  "projectName": "Dokka",
+  "projectDescription": "Dokka is an API documentation engine for Kotlin that generates HTML, Javadoc, and Markdown documentation from KDoc and Javadoc comments.",
+  "theme": "luma",
+  "primaryColor": "#a934e7",
+  "lightColor": "#d484db",
+  "darkColor": "#ffffff",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "migration"
+            ]
+          },
+          {
+            "group": "Runners",
+            "pages": [
+              "runners/gradle",
+              "runners/maven",
+              "runners/cli"
+            ]
+          },
+          {
+            "group": "Output Formats",
+            "pages": [
+              "formats/html",
+              "formats/javadoc",
+              "formats/markdown"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/gradle-options",
+              "configuration/module-and-package-docs",
+              "configuration/plugins"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Developer Guide",
+        "groups": [
+          {
+            "group": "Plugin Development",
+            "pages": [
+              "developer/introduction",
+              "developer/plugin-development",
+              "developer/sample-plugin-tutorial"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "developer/architecture-overview",
+              "developer/data-model",
+              "developer/extension-points"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Generates API documentation from KDoc (Kotlin) and Javadoc (Java) comments",
+    "Multiple output formats: HTML, Javadoc-compatible HTML, GFM Markdown, and Jekyll Markdown",
+    "Supports single-project and multi-project (multi-module) Gradle builds",
+    "Highly pluggable architecture with community plugin ecosystem",
+    "Gradle plugin with full build cache and configuration cache support",
+    "Maven plugin and standalone CLI runner available",
+    "Android documentation plugin for improved Android platform support",
+    "Versioning plugin for managing documentation across multiple library versions",
+    "Custom KDoc tag support through plugin extension points",
+    "Kotlin Multiplatform project support"
+  ],
+  "publicApiSurface": [
+    "org.jetbrains.dokka Gradle plugin (id: org.jetbrains.dokka)",
+    "dokkaGenerate Gradle task",
+    "dokkaGeneratePublicationHtml Gradle task",
+    "dokka {} DSL configuration block",
+    "dokkaPublications.html {} configuration",
+    "dokkaPublications.javadoc {} configuration",
+    "dokkaPlugin() dependency configuration",
+    "dokka-maven-plugin Maven artifact",
+    "dokka:dokka Maven goal",
+    "dokka:javadoc Maven goal",
+    "dokka-cli command-line runner",
+    "DokkaPlugin base class for plugin development",
+    "DokkaExtension Gradle extension class",
+    "pluginsConfiguration {} block",
+    "org.jetbrains.dokka:android-documentation-plugin",
+    "org.jetbrains.dokka:plugin-versioning",
+    "org.jetbrains.dokka:plugin-mathjax",
+    "org.jetbrains.dokka:plugin-kotlin-as-java"
+  ]
+}

@@ -1,0 +1,202 @@
+---
+title: "Generate Kotlin docs from the command line"
+description: "Use Dokka's CLI runner without Gradle or Maven. Download the JAR, supply dependency JARs manually, and configure via flags or a JSON config file."
+---
+
+The Dokka CLI runner lets you generate API documentation without any build tool. It is a standalone JAR published to Maven Central that accepts the same configuration options as the Gradle and Maven plugins. The CLI is ideal for CI pipelines or environments where Gradle or Maven are not available, though it requires you to manage dependencies manually.
+
+<Note>
+The CLI runner has the same capabilities as the Gradle plugin, but lacks autoconfiguration. You must provide all classpath dependencies yourself, which makes it more complex to set up — especially for multiplatform or multi-module projects.
+</Note>
+
+## Download the CLI runner
+
+Download `dokka-cli-2.2.0.jar` from Maven Central:
+
+```bash
+# Download directly
+curl -O https://repo1.maven.org/maven2/org/jetbrains/dokka/dokka-cli/2.2.0/dokka-cli-2.2.0.jar
+```
+
+Verify available options:
+
+```bash
+java -jar dokka-cli-2.2.0.jar -help
+```
+
+For nested source set options:
+
+```bash
+java -jar dokka-cli-2.2.0.jar -sourceSet -help
+```
+
+## Required dependencies
+
+Since there is no build tool to manage dependencies, you must download the required JAR files manually.
+
+**Required for all output formats:**
+
+| Group | Artifact | Version |
+|-------|----------|---------|
+| `org.jetbrains.dokka` | `dokka-base` | 2.2.0 |
+| `org.jetbrains.dokka` | `analysis-kotlin-descriptors` | 2.2.0 |
+
+**Additional dependencies for HTML output:**
+
+| Group | Artifact | Version |
+|-------|----------|---------|
+| `org.jetbrains.kotlinx` | `kotlinx-html-jvm` | 0.8.0 |
+| `org.freemarker` | `freemarker` | 2.3.31 |
+
+## Generate documentation
+
+<Tabs>
+  <Tab title="Command line options">
+    Pass configuration directly as command line flags. At minimum you need `-pluginsClasspath`, `-sourceSet`, and `-outputDir`:
+
+    ```bash
+    java -jar dokka-cli-2.2.0.jar \
+         -pluginsClasspath "./dokka-base-2.2.0.jar;./analysis-kotlin-descriptors-2.2.0.jar;./kotlinx-html-jvm-0.8.0.jar;./freemarker-2.3.31.jar" \
+         -sourceSet "-src /home/myCoolProject/src/main/kotlin" \
+         -outputDir "./dokka/html"
+    ```
+  </Tab>
+  <Tab title="JSON configuration">
+    Pass a JSON configuration file as the only argument. This approach is easier to manage for complex configurations:
+
+    ```bash
+    java -jar dokka-cli-2.2.0.jar dokka-configuration.json
+    ```
+
+    Minimal `dokka-configuration.json`:
+
+    ```json dokka-configuration.json
+    {
+      "outputDir": "./dokka/html",
+      "sourceSets": [
+        {
+          "sourceSetID": {
+            "scopeId": "moduleName",
+            "sourceSetName": "main"
+          },
+          "sourceRoots": [
+            "/home/myCoolProject/src/main/kotlin"
+          ]
+        }
+      ],
+      "pluginsClasspath": [
+        "./dokka-base-2.2.0.jar",
+        "./kotlinx-html-jvm-0.8.0.jar",
+        "./analysis-kotlin-descriptors-2.2.0.jar",
+        "./freemarker-2.3.31.jar"
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Other output formats
+
+By default, the `dokka-base` artifact contains only the HTML output format. Other formats are implemented as plugins — add the plugin JAR to `pluginsClasspath` to enable them.
+
+For example, to generate GFM Markdown output, download `gfm-plugin-2.2.0.jar` and pass it in the classpath:
+
+```bash
+java -jar dokka-cli-2.2.0.jar \
+     -pluginsClasspath "./dokka-base-2.2.0.jar;./analysis-kotlin-descriptors-2.2.0.jar;./gfm-plugin-2.2.0.jar" \
+     -sourceSet "-src /home/myCoolProject/src/main/kotlin" \
+     -outputDir "./dokka/gfm"
+```
+
+## Command line options reference
+
+| Option | Description |
+|--------|-------------|
+| `moduleName` | Name of the project/module |
+| `moduleVersion` | Documented version |
+| `outputDir` | Output directory path (default: `./dokka`) |
+| `sourceSet` | Configuration for a Dokka source set (contains nested options) |
+| `pluginsConfiguration` | Configuration for Dokka plugins |
+| `pluginsClasspath` | List of JAR files with Dokka plugins and their dependencies (semicolon-separated) |
+| `offlineMode` | Whether to resolve remote files/links over the network |
+| `failOnWarning` | Fail documentation generation if Dokka emits a warning or error |
+| `noSuppressObviousFunctions` | Do not suppress obvious functions inherited from `kotlin.Any` / `java.lang.Object` |
+| `includes` | Markdown files for module and package documentation (semicolon-separated) |
+| `suppressInheritedMembers` | Suppress inherited members not explicitly overridden |
+| `loggingLevel` | Logging level: `DEBUG`, `PROGRESS`, `INFO`, `WARN`, `ERROR` |
+
+### Source set options
+
+| Option | Description |
+|--------|-------------|
+| `src` | Source code roots to analyze and document (semicolon-separated paths) |
+| `classpath` | Classpath for analysis (semicolon-separated `.jar`/`.klib` paths) |
+| `sourceSetName` | Name of the source set |
+| `displayName` | Display name of the source set |
+| `documentedVisibilities` | Visibilities to document: `PUBLIC`, `PRIVATE`, `PROTECTED`, `INTERNAL`, `PACKAGE` |
+| `reportUndocumented` | Emit warnings about visible undocumented declarations |
+| `skipDeprecated` | Skip declarations annotated with `@Deprecated` |
+| `jdkVersion` | JDK version for linking to JDK Javadocs |
+| `analysisPlatform` | Platform for code analysis: `jvm`, `common`, `js`, `native` |
+| `samples` | Directories/files containing sample functions |
+| `suppressedFiles` | Files to suppress when generating documentation |
+
+## Complete JSON configuration
+
+A full example with all available options:
+
+```json dokka-configuration.json expandable
+{
+  "moduleName": "Dokka Example",
+  "moduleVersion": null,
+  "outputDir": "./build/dokka/html",
+  "failOnWarning": false,
+  "suppressObviousFunctions": true,
+  "suppressInheritedMembers": false,
+  "offlineMode": false,
+  "sourceLinks": [
+    {
+      "localDirectory": "src/main/kotlin",
+      "remoteUrl": "https://github.com/Kotlin/dokka/tree/master/src/main/kotlin",
+      "remoteLineSuffix": "#L"
+    }
+  ],
+  "externalDocumentationLinks": [
+    {
+      "url": "https://kotlinlang.org/api/core/kotlin-stdlib/",
+      "packageListUrl": "https://kotlinlang.org/api/core/kotlin-stdlib/package-list"
+    }
+  ],
+  "sourceSets": [
+    {
+      "displayName": "jvm",
+      "sourceSetID": {
+        "scopeId": "moduleName",
+        "sourceSetName": "main"
+      },
+      "documentedVisibilities": ["PUBLIC"],
+      "reportUndocumented": false,
+      "skipEmptyPackages": true,
+      "skipDeprecated": false,
+      "jdkVersion": 8,
+      "analysisPlatform": "jvm",
+      "sourceRoots": [
+        "/home/myCoolProject/src/main/kotlin"
+      ],
+      "classpath": [
+        "libs/kotlin-stdlib-2.0.0.jar"
+      ]
+    }
+  ],
+  "pluginsClasspath": [
+    "./dokka-base-2.2.0.jar",
+    "./kotlinx-html-jvm-0.8.0.jar",
+    "./analysis-kotlin-descriptors-2.2.0.jar",
+    "./freemarker-2.3.31.jar"
+  ]
+}
+```
+
+<Tip>
+Use JSON configuration for complex setups — it's easier to maintain than long command lines and supports all available options.
+</Tip>

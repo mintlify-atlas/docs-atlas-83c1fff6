@@ -1,0 +1,145 @@
+---
+title: "Write module and package docs in separate Markdown files"
+description: "Document your module and packages using standalone Markdown files with Module and Package headings, then include them in Dokka via Gradle, Maven, or CLI."
+keywords: ["dokka", "module documentation", "package documentation", "includes", "kdoc", "markdown"]
+---
+
+Dokka lets you write documentation for a module as a whole and for individual packages in standalone Markdown files, separate from your source code. This is useful when the overview of a module or package needs more prose than fits naturally in a KDoc comment — for example, architecture explanations, usage examples, or cross-package narratives. Once you author these files and point Dokka to them via the `includes` option, their content is embedded directly into the generated documentation.
+
+## File format
+
+A single Markdown file can contain documentation for the module, one or more packages, or any combination of the three. Sections are delimited by first-level Markdown headings that follow a required naming convention:
+
+- **Module heading:** `# Module <module-name>` — the module name must match the `moduleName` you have configured (or the Gradle project name by default).
+- **Package heading:** `# Package <fully-qualified-package-name>` — for example, `# Package org.jetbrains.kotlin.demo`.
+
+The text of those headings **must** start with exactly `Module` or `Package` (case-sensitive), followed by the name. Everything after the heading, up to the next heading at the same level, is treated as documentation for that module or package.
+
+<Note>
+  A file does not have to contain both module and package documentation. You can have separate files — one per module, one per package, or any mix — as long as each file follows the heading convention above.
+</Note>
+
+Inside each section you can use standard [Markdown syntax](https://www.markdownguide.org/basic-syntax/), including:
+
+- Headings up to level 6 (levels 2–6 become sub-sections within the module or package documentation)
+- Bold and italic emphasis
+- Links
+- Inline code and fenced code blocks
+- Blockquotes
+
+## Example file
+
+The following example shows a single Markdown file that documents one module and two packages:
+
+```text packages.md
+# Module kotlin-demo
+
+This content appears under your module name in the generated documentation.
+
+# Package org.jetbrains.kotlin.demo
+
+This content appears under your package name in the packages list.
+It also appears under the first-level heading on your package's page.
+
+## Level 2 heading for package org.jetbrains.kotlin.demo
+
+Content after this heading is also part of documentation for `org.jetbrains.kotlin.demo`.
+
+# Package org.jetbrains.kotlin.demo2
+
+This content appears under your package name in the packages list.
+It also appears under the first-level heading on your package's page.
+
+## Level 2 heading for package org.jetbrains.kotlin.demo2
+
+Content after this heading is also part of documentation for `org.jetbrains.kotlin.demo2`.
+```
+
+<Tip>
+  You can split this across multiple files — for example, one `module.md` that documents only the module and one `packages.md` that documents all packages. Pass all files to the `includes` option and Dokka merges them.
+</Tip>
+
+## Pass files to Dokka
+
+After authoring your Markdown file, register it with Dokka using the `includes` option for your build tool. You can pass a single file, multiple individual files, or a file tree.
+
+<Tabs>
+  <Tab title="Gradle (Kotlin DSL)">
+    Use the `includes` option in the `dokkaPublications.html {}` block:
+
+    ```kotlin build.gradle.kts
+    dokka {
+        dokkaPublications.html {
+            // Pass individual files
+            includes.from("packages.md", "extra.md")
+
+            // Or pass all Markdown files from a directory
+            includes.from(
+                fileTree("docs") {
+                    include("**/*.md")
+                }
+            )
+        }
+    }
+    ```
+
+    See the [Gradle options reference](/configuration/gradle-options#publication-options) for the full description of the `includes` parameter.
+  </Tab>
+  <Tab title="Gradle (Groovy DSL)">
+    ```groovy build.gradle
+    dokka {
+        dokkaPublications {
+            html {
+                includes.from(files("packages.md", "extra.md"))
+            }
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="Maven">
+    Use the `includes` option in the Maven plugin configuration:
+
+    ```xml pom.xml
+    <plugin>
+        <groupId>org.jetbrains.dokka</groupId>
+        <artifactId>dokka-maven-plugin</artifactId>
+        <configuration>
+            <includes>
+                <include>${project.basedir}/packages.md</include>
+                <include>${project.basedir}/extra.md</include>
+            </includes>
+        </configuration>
+    </plugin>
+    ```
+  </Tab>
+  <Tab title="CLI">
+    When using command-line options, pass `includes` as part of the source set options:
+
+    ```bash
+    java -jar dokka-cli-2.2.0.jar \
+        -sourceSet "-src src/main/kotlin -includes packages.md;extra.md" \
+        ...
+    ```
+
+    When using JSON configuration, set `includes` in the global configuration block:
+
+    ```json dokka-config.json
+    {
+      "moduleName": "kotlin-demo",
+      "includes": ["packages.md", "extra.md"]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## How the content appears in generated docs
+
+Once Dokka processes the included Markdown files:
+
+- **Module documentation** appears on the module's index page, below the module name heading.
+- **Package documentation** appears in two places: as a short description next to the package name in the packages list, and as the full description on the package's own page.
+- Sub-headings (levels 2 and below) within each section are rendered as normal headings within the module or package page.
+
+<Warning>
+  If the module name in a `# Module` heading does not match the configured `moduleName`, Dokka will not associate the content with any module and the documentation will be silently ignored. Double-check that the names match exactly.
+</Warning>
